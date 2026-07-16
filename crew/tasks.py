@@ -1,10 +1,10 @@
 from crewai import Task
+from agents import code_critic, improver
 
 # ============================================
-# Пример задач (пока базовые)
+# Задачи
 # ============================================
 
-# Задача для CodeCritic
 analyze_code_task = Task(
     description=(
         "Проанализируй текущий код сканера и индикатора Liquidity Raid Hunter. "
@@ -15,7 +15,6 @@ analyze_code_task = Task(
     agent=code_critic
 )
 
-# Задача для Improver
 propose_improvements_task = Task(
     description=(
         "На основе критики от CodeCritic предложи конкретные улучшения кода, логики и архитектуры. "
