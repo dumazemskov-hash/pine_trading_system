@@ -8,9 +8,9 @@ from datetime import datetime
 
 MEMORY_BANK = "memory-bank"
 
-# === Настройки LLM (пока заглушка) ===
+# === Настройки LLM ===
 LLM_API_URL = "https://api.openai.com/v1/chat/completions"
-LLM_API_KEY = "sk-..."          # Вставь свой ключ позже
+LLM_API_KEY = "sk-..."          # <-- Вставь свой ключ
 LLM_MODEL = "gpt-4o-mini"
 
 def log(message: str):
@@ -31,7 +31,6 @@ def write_file(filename: str, content: str):
     log(f"Записан файл: {filename}")
 
 def call_llm(system_prompt: str, user_prompt: str) -> str:
-    """Простой вызов LLM (пока через OpenAI)"""
     headers = {
         "Authorization": f"Bearer {LLM_API_KEY}",
         "Content-Type": "application/json"
@@ -81,7 +80,26 @@ def run_cycle():
     write_file("last_orchestrator.md", orchestrator_output)
     log("Orchestrator завершён")
 
-    # TODO: Добавить CodeCritic и Improver
+    # === 2. CodeCritic ===
+    log("Запуск CodeCritic...")
+    critic_output = call_llm(
+        system_prompt="Ты — жёсткий и детальный критик кода и архитектуры.",
+        user_prompt=f"""Ты — CodeCritic.
+{agents_md}
+
+Текущий контекст проекта:
+{active_context}
+
+Результат работы Orchestrator:
+{orchestrator_output}
+
+Проанализируй ситуацию и найди самые важные проблемы в коде, логике и архитектуре. 
+Запиши их чётко и структурировано."""
+    )
+    write_file("last_critique.md", critic_output)
+    log("CodeCritic завершён")
+
+    # TODO: Добавить Improver
 
     log("=== Цикл завершён ===")
 
