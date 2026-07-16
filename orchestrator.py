@@ -8,11 +8,9 @@ from datetime import datetime
 
 MEMORY_BANK = "memory-bank"
 
-# === Настройки LLM ===
-# Пока используем OpenAI-совместимый API.
-# Позже можно поменять на Grok / Claude / локальную модель.
+# === Настройки LLM (пока заглушка) ===
 LLM_API_URL = "https://api.openai.com/v1/chat/completions"
-LLM_API_KEY = "sk-..."          # <-- Сюда нужно будет вставить свой ключ
+LLM_API_KEY = "sk-..."          # Вставь свой ключ позже
 LLM_MODEL = "gpt-4o-mini"
 
 def log(message: str):
@@ -33,7 +31,7 @@ def write_file(filename: str, content: str):
     log(f"Записан файл: {filename}")
 
 def call_llm(system_prompt: str, user_prompt: str) -> str:
-    """Вызов LLM через OpenAI-совместимый API"""
+    """Простой вызов LLM (пока через OpenAI)"""
     headers = {
         "Authorization": f"Bearer {LLM_API_KEY}",
         "Content-Type": "application/json"
@@ -51,41 +49,37 @@ def call_llm(system_prompt: str, user_prompt: str) -> str:
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        log(f"Ошибка вызова LLM: {e}")
-        return f"[ERROR] Не удалось получить ответ от LLM: {e}"
+        log(f"Ошибка LLM: {e}")
+        return f"[ERROR] {e}"
 
 # ============================================
 # Основной цикл
 # ============================================
 
 def run_cycle():
-    log("=== Запуск нового цикла ===")
+    log("=== Новый цикл ===")
 
     active_context = read_file("activeContext.md")
     progress = read_file("Progress.md")
-    agents = read_file("Agents.md")
+    agents_md = read_file("Agents.md")
 
-    log("Прочитаны файлы памяти")
-
-    # === Шаг 1: Orchestrator ===
+    # === 1. Orchestrator ===
     log("Запуск Orchestrator...")
-    orchestrator_prompt = f"""Ты — Orchestrator.
-{agents}
-
-Текущий контекст:
+    orchestrator_output = call_llm(
+        system_prompt="Ты — Orchestrator проекта Liquidity Raid Hunter. Ты координируешь работу агентов.",
+        user_prompt=f"""Текущий контекст:
 {active_context}
 
 Текущий прогресс:
 {progress}
 
-Твоя задача: проанализировать ситуацию и дать чёткие задачи для CodeCritic и Improver на следующий цикл.
-"""
-    orchestrator_response = call_llm(
-        system_prompt="Ты — опытный Team Lead проекта Liquidity Raid Hunter.",
-        user_prompt=orchestrator_prompt
+Роли агентов:
+{agents_md}
+
+Дай чёткие задачи для CodeCritic и Improver на этот цикл."""
     )
-    write_file("Orchestrator_Response.md", orchestrator_response)
-    log("Orchestrator завершил работу")
+    write_file("last_orchestrator.md", orchestrator_output)
+    log("Orchestrator завершён")
 
     # TODO: Добавить CodeCritic и Improver
 
