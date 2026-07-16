@@ -65,7 +65,7 @@ def run_cycle():
     # === 1. Orchestrator ===
     log("Запуск Orchestrator...")
     orchestrator_output = call_llm(
-        system_prompt="Ты — Orchestrator проекта Liquidity Raid Hunter. Ты координируешь работу агентов.",
+        system_prompt="Ты — Orchestrator проекта Liquidity Raid Hunter.",
         user_prompt=f"""Текущий контекст:
 {active_context}
 
@@ -87,21 +87,37 @@ def run_cycle():
         user_prompt=f"""Ты — CodeCritic.
 {agents_md}
 
-Текущий контекст проекта:
+Текущий контекст:
 {active_context}
 
-Результат работы Orchestrator:
+Результат Orchestrator:
 {orchestrator_output}
 
-Проанализируй ситуацию и найди самые важные проблемы в коде, логике и архитектуре. 
-Запиши их чётко и структурировано."""
+Найди самые важные проблемы в коде и логике. Запиши их структурировано."""
     )
     write_file("last_critique.md", critic_output)
     log("CodeCritic завершён")
 
-    # TODO: Добавить Improver
+    # === 3. Improver ===
+    log("Запуск Improver...")
+    improver_output = call_llm(
+        system_prompt="Ты — практичный генератор улучшений. Предлагай реалистичные решения.",
+        user_prompt=f"""Ты — Improver.
+{agents_md}
 
-    log("=== Цикл завершён ===")
+Текущий контекст:
+{active_context}
+
+Критика от CodeCritic:
+{critic_output}
+
+На основе критики предложи конкретные, реалистичные улучшения. 
+Оцени сложность и пользу каждого предложения."""
+    )
+    write_file("last_improver.md", improver_output)
+    log("Improver завершён")
+
+    log("=== Цикл полностью завершён ===")
 
 if __name__ == "__main__":
     run_cycle()
