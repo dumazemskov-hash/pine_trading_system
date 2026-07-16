@@ -3,15 +3,9 @@
 """
 
 import os
-import requests
 from datetime import datetime
 
 MEMORY_BANK = "memory-bank"
-
-# === Настройки LLM ===
-LLM_API_URL = "https://api.openai.com/v1/chat/completions"
-LLM_API_KEY = "sk-..."          # <-- Вставь свой ключ
-LLM_MODEL = "gpt-4o-mini"
 
 def log(message: str):
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -24,32 +18,22 @@ def read_file(filename: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
+def append_to_file(filename: str, content: str):
+    """Добавляет запись в файл с timestamp"""
+    path = os.path.join(MEMORY_BANK, filename)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    entry = f"\n\n### [{timestamp}]\n{content.strip()}\n"
+    
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(entry)
+    log(f"Добавлена запись в {filename}")
+
 def write_file(filename: str, content: str):
     path = os.path.join(MEMORY_BANK, filename)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    log(f"Записан файл: {filename}")
-
-def call_llm(system_prompt: str, user_prompt: str) -> str:
-    headers = {
-        "Authorization": f"Bearer {LLM_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": LLM_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "temperature": 0.4
-    }
-    try:
-        response = requests.post(LLM_API_URL, headers=headers, json=payload, timeout=120)
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        log(f"Ошибка LLM: {e}")
-        return f"[ERROR] {e}"
+    log(f"Перезаписан файл: {filename}")
 
 # ============================================
 # Основной цикл
@@ -64,60 +48,28 @@ def run_cycle():
 
     # === 1. Orchestrator ===
     log("Запуск Orchestrator...")
-    orchestrator_output = call_llm(
-        system_prompt="Ты — Orchestrator проекта Liquidity Raid Hunter.",
-        user_prompt=f"""Текущий контекст:
-{active_context}
-
-Текущий прогресс:
-{progress}
-
-Роли агентов:
-{agents_md}
-
-Дай чёткие задачи для CodeCritic и Improver на этот цикл."""
-    )
-    write_file("last_orchestrator.md", orchestrator_output)
-    log("Orchestrator завершён")
+    orchestrator_output = f"""[Orchestrator]
+Текущий контекст проанализирован.
+Даны задачи для CodeCritic и Improver.
+(Полный вывод будет позже при подключении LLM)"""
+    append_to_file("last_orchestrator.md", orchestrator_output)
 
     # === 2. CodeCritic ===
     log("Запуск CodeCritic...")
-    critic_output = call_llm(
-        system_prompt="Ты — жёсткий и детальный критик кода и архитектуры.",
-        user_prompt=f"""Ты — CodeCritic.
-{agents_md}
-
-Текущий контекст:
-{active_context}
-
-Результат Orchestrator:
-{orchestrator_output}
-
-Найди самые важные проблемы в коде и логике. Запиши их структурировано."""
-    )
-    write_file("last_critique.md", critic_output)
-    log("CodeCritic завершён")
+    critique_output = """[CodeCritic - Placeholder]
+Здесь будет критика кода после подключения LLM.
+Проблемы будут записываться в CritiqueLog.md"""
+    append_to_file("CritiqueLog.md", critique_output)
 
     # === 3. Improver ===
     log("Запуск Improver...")
-    improver_output = call_llm(
-        system_prompt="Ты — практичный генератор улучшений. Предлагай реалистичные решения.",
-        user_prompt=f"""Ты — Improver.
-{agents_md}
+    improver_output = """[Improver - Placeholder]
+Здесь будут предложения по улучшению.
+Идеи будут записываться в IdeaLog.md"""
+    append_to_file("IdeaLog.md", improver_output)
 
-Текущий контекст:
-{active_context}
-
-Критика от CodeCritic:
-{critic_output}
-
-На основе критики предложи конкретные, реалистичные улучшения. 
-Оцени сложность и пользу каждого предложения."""
-    )
-    write_file("last_improver.md", improver_output)
-    log("Improver завершён")
-
-    log("=== Цикл полностью завершён ===")
+    log("=== Цикл завершён ===")
+    log("Результаты записаны в CritiqueLog.md и IdeaLog.md")
 
 if __name__ == "__main__":
     run_cycle()
