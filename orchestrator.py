@@ -1,6 +1,6 @@
 """
 Лёгкий оркестратор для multi-agent системы Liquidity Raid Hunter
-(Безопасная версия с переменной окружения)
+(Оптимизированная версия под цену/качество)
 """
 
 import os
@@ -11,8 +11,8 @@ MEMORY_BANK = "memory-bank"
 
 # === OpenRouter настройки ===
 LLM_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-LLM_API_KEY = os.getenv("OPENROUTER_API_KEY")        # ← Ключ берётся из переменной окружения
-LLM_MODEL = "openai/gpt-4o-mini"
+LLM_API_KEY = os.getenv("OPENROUTER_API_KEY")
+LLM_MODEL = "meta-llama/llama-3.3-70b-instruct"   # Хорошее качество + разумная цена
 
 def log(message: str):
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -49,7 +49,7 @@ def call_llm(system_prompt: str, user_prompt: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        "temperature": 0.4
+        "temperature": 0.35
     }
     try:
         response = requests.post(LLM_API_URL, headers=headers, json=payload, timeout=120)
@@ -73,7 +73,7 @@ def run_cycle():
     # === 1. Orchestrator ===
     log("Запуск Orchestrator...")
     orchestrator_output = call_llm(
-        system_prompt="Ты — Orchestrator проекта Liquidity Raid Hunter.",
+        system_prompt="Ты — Orchestrator проекта Liquidity Raid Hunter. Ты координируешь агентов и даёшь чёткие задачи.",
         user_prompt=f"""Текущий контекст:
 {active_context}
 
@@ -83,7 +83,7 @@ def run_cycle():
 Роли агентов:
 {agents_md}
 
-Дай чёткие задачи для CodeCritic и Improver на этот цикл."""
+Дай чёткие задачи для CodeCritic и Improver на этот цикл. Будь конкретным."""
     )
     append_to_file("last_orchestrator.md", orchestrator_output)
     log("Orchestrator завершён")
@@ -91,7 +91,7 @@ def run_cycle():
     # === 2. CodeCritic ===
     log("Запуск CodeCritic...")
     critic_output = call_llm(
-        system_prompt="Ты — жёсткий и детальный критик кода и архитектуры.",
+        system_prompt="Ты — жёсткий и детальный критик кода и архитектуры. Не льсти, говори прямо.",
         user_prompt=f"""Ты — CodeCritic.
 {agents_md}
 
@@ -101,7 +101,8 @@ def run_cycle():
 Результат Orchestrator:
 {orchestrator_output}
 
-Найди самые важные проблемы в коде и логике. Запиши их структурировано."""
+Проанализируй код, логику и архитектуру. Найди самые важные проблемы и слабые места. 
+Запиши их чётко и структурировано."""
     )
     append_to_file("CritiqueLog.md", critic_output)
     log("CodeCritic завершён")
@@ -109,7 +110,7 @@ def run_cycle():
     # === 3. Improver ===
     log("Запуск Improver...")
     improver_output = call_llm(
-        system_prompt="Ты — практичный генератор улучшений.",
+        system_prompt="Ты — практичный и реалистичный генератор улучшений. Предлагай только то, что можно реально сделать.",
         user_prompt=f"""Ты — Improver.
 {agents_md}
 
@@ -119,7 +120,10 @@ def run_cycle():
 Критика от CodeCritic:
 {critic_output}
 
-Предложи конкретные, реалистичные улучшения. Оцени сложность и пользу."""
+На основе критики предложи конкретные улучшения. Для каждого предложения укажи:
+- Что именно менять
+- Примерную сложность (Низкая / Средняя / Высокая)
+- Ожидаемую пользу"""
     )
     append_to_file("IdeaLog.md", improver_output)
     log("Improver завершён")
