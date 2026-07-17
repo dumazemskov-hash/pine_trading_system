@@ -1,0 +1,81 @@
+//@version=6
+indicator("Liquidity Raid Hunter v8.24", overlay=true, max_lines_count=300, max_labels_count=50)
+
+// === НАСТРОЙКИ ===
+minBodyPct      = input.float(4.5, "Мин. тело (%)")
+impulseMult     = input.float(1.25, "Множитель импульса")
+volumeRatio     = input.float(1.9, "Множитель объёма")
+liqLookback     = input.int(6, "Liquidity Lookback")
+structLookback  = input.int(7, "Structure Lookback")
+conditionD      = input.float(0.6, "Условие D (объём)")
+maxRiskPct      = input.float(2.0, "Макс. риск (%)")
+stopBuffer      = input.float(0.3, "Буфер структурного стопа (%)")
+simpleBuffer    = input.float(0.5, "Буфер простого стопа (%)")
+tp1RR           = input.float(1.6, "TP1 (R)")
+tp2RR           = input.float(3.0, "TP2 (R)")
+priorVolMult    = input.float(1.35, "Множитель предварительного объёма")
+
+// === РАСЧЁТЫ ===
+bodyPct = math.abs(close - open) / open * 100
+impulse = (high - low) / low * 100
+volMa = ta.sma(volume, 20)
+volRecent = ta.sma(volume, 20)
+volOlder = ta.sma(volume[20], 40)
+
+// Условия
+strongBody = bodyPct >= minBodyPct
+strongImpulse = impulse >= minBodyPct * impulseMult
+strongVolume = volume > volMa * volumeRatio
+priorVolume = volRecent > volOlder * priorVolMult
+
+recentLow = ta.lowest(low[1], liqLookback)
+liquidityGrab = low < recentLow * 0.994
+bearish = close < open and close < close[1]
+
+structureLow = ta.lowest(low[1], structLookback)
+structureFilter = low < structureLow * 0.997
+
+volumeConfirmed = volume >= volume[1] * conditionD
+
+signal = strongBody and strongImpulse and strongVolume and priorVolume and liquidityGrab and bearish and structureFilter and volumeConfirmed and barstate.isconfirmed
+
+// === СТОП И ТЕЙКИ ===
+var float entry = na
+var float stop = na
+var float tp1 = na
+var float tp2 = na
+
+if signal
+    entry := close
+    
+    structureHigh = ta.highest(high[1], structLookback)
+    structuralStop = structureHigh * (1 + stopBuffer / 100)
+    simpleStop = high * (1 + simpleBuffer / 100)
+    candidateStop = math.max(structuralStop, simpleStop)
+    maxAllowedStop = entry * (1 + maxRiskPct / 100)
+    stop := math.min(candidateStop, maxAllowedStop)
+    
+    risk = stop - entry
+    tp1 := entry - risk * tp1RR
+    tp2 := entry - risk * tp2RR
+
+// === ВИЗУАЛИЗАЦИЯ ===
+plotshape(signal, title="RAID", location=location.abovebar, style=shape.labeldown, color=color.red, text="RAID", textcolor=color.white, size=size.normal)
+
+var line stopLine = na
+var line tp1Line = na
+var line tp2Line = na
+var label entryLabel = na
+
+if signal
+    line.delete(stopLine)
+    line.delete(tp1Line)
+    line.delete(tp2Line)
+    label.delete(entryLabel)
+    
+    stopLine := line.new(bar_index, stop, bar_index + 30, stop, color=color.red, style=line.style_dashed, width=2)
+    tp1Line := line.new(bar_index, tp1, bar_index + 30, tp1, color=color.green, width=2)
+    tp2Line := line.new(bar_index, tp2, bar_index + 30, tp2, color=color.lime, width=2)
+    entryLabel := label.new(bar_index, entry, "Вход", style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.small)
+
+alertcondition(signal, title="RAID Signal", message="RAID v8.24 {{ticker}}")
