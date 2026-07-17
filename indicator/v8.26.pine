@@ -1,0 +1,181 @@
+//@version=6
+indicator("Liquidity Raid Hunter v8.26", overlay=true, max_lines_count=100, max_labels_count=50)
+
+// === SETTINGS (sync with scanner v8.26) ===
+minBodyPct        = input.float(4.5,  "Min Body %", minval=2.0, step=0.1)
+impulseStrength   = input.float(1.25, "Impulse Strength", minval=1.0, step=0.05)
+volumeRatio       = input.float(1.9,  "Volume Ratio", minval=1.0, step=0.1)
+priorVolMult      = input.float(1.35, "Prior Volume Mult", minval=1.0, step=0.05)
+conditionD        = input.float(0.6,  "Condition D", minval=0.3, step=0.05)
+maxRiskPct        = input.float(2.0,  "Max Risk %", minval=0.5, step=0.1)
+
+eqlLookback       = input.int(20, "EQL Lookback", minval=10, maxval=40)
+swingN            = input.int(2,  "Swing N", minval=1, maxval=3)
+minTouchDist      = input.int(3,  "Min Touch Distance", minval=2, maxval=8)
+maxClusterSpan    = input.int(12, "Max Cluster Span", minval=6, maxval=20)
+eqlTolAtr         = input.float(0.30, "EQL Tolerance ATR", minval=0.1, step=0.05)
+eqlTolPct         = input.float(0.25, "EQL Tolerance %", minval=0.1, step=0.05) / 100.0
+minZoneScore      = input.int(3,  "Min Zone Score", minval=2, maxval=5)
+breakAtrMult      = input.float(0.40, "Break ATR Mult", minval=0.2, step=0.05)
+stopAtrMult       = input.float(0.35, "Stop ATR Mult", minval=0.1, step=0.05)
+
+tp1RR             = input.float(1.6, "TP1 R:R", minval=1.0, step=0.1)
+tp2RR             = input.float(3.0, "TP2 R:R", minval=1.5, step=0.1)
+
+// === DATA ===
+atrVal = ta.atr(14)
+volMa  = ta.sma(volume, 20)
+
+volRecent = ta.sma(volume, 20)
+volOlder  = ta.sma(volume[20], 40)
+
+// === SWING LOW (order N=2) ===
+isSwingLow(int idx) =>
+    bool ok = true
+    float l = low[idx]
+    for k = 1 to swingN
+        if low[idx + k] <= l or low[idx - k] <= l
+            ok := false
+    ok
+
+// === FIND BEST EQUAL LOW ZONE + SCORE ===
+findZone() =>
+    float bestLow = na
+    int bestScore = 0
+    int bestTouches = 0
+
+    float tolerance = math.max(atrVal * eqlTolAtr, close * eqlTolPct)
+
+    for anchor = swingN to (eqlLookback - swingN)
+        if not isSwingLow(anchor)
+            continue
+
+        float anchorPrice = low[anchor]
+        int touches = 1
+        float volSum = volume[anchor]
+        int minIdx = anchor
+        int maxIdx = anchor
+        bool fresh = anchor <= 12
+
+        for other = swingN to (eqlLookback - swingN)
+            if other == anchor
+                continue
+            if not isSwingLow(other)
+                continue
+
+            float otherPrice = low[other]
+            int dist = math.abs(other - anchor)
+
+            if dist < minTouchDist
+                continue
+            if dist > maxClusterSpan
+                continue
+            if math.abs(otherPrice - anchorPrice) > tolerance
+                continue
+
+            touches += 1
+            volSum += volume[other]
+            minIdx := math.min(minIdx, other)
+            maxIdx := math.max(maxIdx, other)
+            if other <= 12
+                fresh := true
+
+        if touches < 2
+            continue
+
+        if (maxIdx - minIdx) > maxClusterSpan
+            continue
+
+        float zLow = anchorPrice
+        for other = swingN to (eqlLookback - swingN)
+            if not isSwingLow(other)
+                continue
+            int dist = math.abs(other - anchor)
+            if dist >= minTouchDist and dist <= maxClusterSpan and math.abs(low[other] - anchorPrice) <= tolerance
+                zLow := math.min(zLow, low[other])
+
+        float avgVol = volSum / touches
+        int score = 0
+        if touches == 2
+            score += 1
+        else if touches == 3
+            score += 2
+        else
+            score += 3
+        if avgVol >= volMa * 1.2
+            score += 1
+        if fresh
+            score += 1
+
+        if score > bestScore
+            bestScore := score
+            bestLow := zLow
+            bestTouches := touches
+
+    [bestLow, bestScore, bestTouches]
+
+// === SIGNAL (only closed bar) ===
+bool bodyOk = math.abs(close - open) / open * 100.0 >= minBodyPct
+bool impulseOk = (high - low) / low * 100.0 >= minBodyPct * impulseStrength
+bool volOk = volume >= volMa * volumeRatio
+bool priorOk = not na(volOlder) and volOlder > 0 and volRecent >= volOlder * priorVolMult
+bool bearish = close < open and close < close[1]
+bool condD = volume >= volume[1] * conditionD
+
+[zoneLow, zoneScore, zoneTouches] = findZone()
+bool zoneOk = not na(zoneLow) and zoneScore >= minZoneScore
+
+float breakLevel = zoneOk ? zoneLow - atrVal * breakAtrMult : na
+bool breakOk = zoneOk and low < breakLevel
+
+bool signal = barstate.isconfirmed and bodyOk and impulseOk and volOk and priorOk and bearish and condD and zoneOk and breakOk
+
+// === LEVELS ===
+var float entry = na
+var float stop  = na
+var float tp1   = na
+var float tp2   = na
+var float risk  = na
+
+if signal
+    entry := close
+    float stopCand = high + atrVal * stopAtrMult
+    float maxStop  = entry * (1.0 + maxRiskPct / 100.0)
+    stop  := math.min(stopCand, maxStop)
+    risk  := stop - entry
+    tp1   := entry - risk * tp1RR
+    tp2   := entry - risk * tp2RR
+
+// === VISUALS ===
+plotshape(signal, title="RAID", location=location.abovebar, style=shape.labeldown, color=color.new(color.red, 0), text="RAID", textcolor=color.white, size=size.small)
+plotshape(signal, title="Entry", location=location.belowbar, style=shape.circle, color=color.new(color.orange, 0), size=size.tiny)
+
+var line stopLine = na
+var line tp1Line  = na
+var line tp2Line  = na
+var line entryLine = na
+var label tp1Lbl = na
+var label tp2Lbl = na
+var label stopLbl = na
+
+if signal
+    line.delete(stopLine)
+    line.delete(tp1Line)
+    line.delete(tp2Line)
+    line.delete(entryLine)
+    label.delete(tp1Lbl)
+    label.delete(tp2Lbl)
+    label.delete(stopLbl)
+
+    entryLine := line.new(bar_index, entry, bar_index + 30, entry, color=color.new(color.orange, 0), width=1, style=line.style_dotted)
+    stopLine  := line.new(bar_index, stop,  bar_index + 30, stop,  color=color.red, width=2, style=line.style_dashed)
+    tp1Line   := line.new(bar_index, tp1,   bar_index + 30, tp1,   color=color.green, width=2)
+    tp2Line   := line.new(bar_index, tp2,   bar_index + 30, tp2,   color=color.lime, width=2)
+
+    stopLbl := label.new(bar_index + 30, stop, "SL", style=label.style_label_left, color=color.red, textcolor=color.white, size=size.small)
+    tp1Lbl  := label.new(bar_index + 30, tp1,  "TP1", style=label.style_label_left, color=color.green, textcolor=color.white, size=size.small)
+    tp2Lbl  := label.new(bar_index + 30, tp2,  "TP2", style=label.style_label_left, color=color.lime, textcolor=color.black, size=size.small)
+
+plot(signal ? zoneLow : na, title="Zone Low", color=color.new(color.fuchsia, 30), style=plot.style_linebr, linewidth=1)
+
+alertcondition(signal, title="RAID v8.26", message="RAID v8.26 signal")
