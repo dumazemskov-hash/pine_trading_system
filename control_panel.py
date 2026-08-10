@@ -26,7 +26,6 @@ if not SCANNER_SCRIPT.exists():
 
 
 def find_git() -> str:
-    """На Windows GUI часто не видит git из PATH — ищем явно."""
     g = shutil.which("git")
     if g:
         return g
@@ -46,7 +45,7 @@ class ControlPanel(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("RAID Hunter — Control Panel")
-        self.geometry("780x560")
+        self.geometry("820x560")
         self.minsize(640, 480)
         self.configure(bg="#1e1e1e")
 
@@ -82,6 +81,7 @@ class ControlPanel(tk.Tk):
             ("Остановить сканер", self.cmd_stop_scanner),
             ("Проверить сигналы", self.cmd_check_signals),
             ("Push логов", self.cmd_push_signals),
+            ("Push all", self.cmd_push_all),
             ("Открыть signals", self.cmd_open_signals),
             ("Обновить статус", self.cmd_refresh_status),
         ]
@@ -183,7 +183,6 @@ class ControlPanel(tk.Tk):
         if self.scanner_proc and self.scanner_proc.poll() is None:
             self._log("Сканер уже запущен")
             return
-
         if not SCANNER_SCRIPT.exists():
             self._log(f"Не найден: {SCANNER_SCRIPT}")
             messagebox.showerror("Ошибка", f"Нет файла:\n{SCANNER_SCRIPT}")
@@ -247,11 +246,9 @@ class ControlPanel(tk.Tk):
             gitkeep = SIGNALS_DIR / ".gitkeep"
             if not any(SIGNALS_DIR.glob("*.jsonl")) and not gitkeep.exists():
                 gitkeep.write_text("")
-
             if not self._run_cmd(["git", "add", "signals"], cwd=str(ROOT)):
                 self._log("git add не удался")
                 return
-
             r = subprocess.run(
                 [find_git(), "status", "--porcelain", "signals"],
                 cwd=str(ROOT),
@@ -264,9 +261,35 @@ class ControlPanel(tk.Tk):
             if not (r.stdout or "").strip():
                 self._log("Нет новых логов для пуша")
                 return
-
             msg = f"signals {datetime.now().strftime('%Y-%m-%d %H:%M')}"
             self._run_cmd(["git", "commit", "-m", msg], cwd=str(ROOT))
+            self._run_cmd(["git", "push"], cwd=str(ROOT))
+        self._run_async(job)
+
+    def cmd_push_all(self):
+        def job():
+            self._log("--- push all ---")
+            if not self._run_cmd(["git", "add", "-A"], cwd=str(ROOT)):
+                self._log("git add -A не удался")
+                return
+            r = subprocess.run(
+                [find_git(), "status", "--porcelain"],
+                cwd=str(ROOT),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=self._env(),
+            )
+            if not (r.stdout or "").strip():
+                self._log("Нет изменений для пуша")
+                return
+            for line in (r.stdout or "").strip().splitlines()[:20]:
+                self._log("  " + line)
+            msg = f"update {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            if not self._run_cmd(["git", "commit", "-m", msg], cwd=str(ROOT)):
+                self._log("commit не удался")
+                return
             self._run_cmd(["git", "push"], cwd=str(ROOT))
         self._run_async(job)
 
