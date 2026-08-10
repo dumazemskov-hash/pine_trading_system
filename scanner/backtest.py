@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-RAID Hunter — Historical Backtest v8.32
+RAID Hunter — Historical Backtest v8.33
 Фильтры: body 4-9%, prev<=3%, cooldown 32,
          close in bottom 35% of range, body/range>=50%,
          STOP-cooldown 96 bars (24h) per symbol
+Confirmation: next bar must not hit stop
 Equity: $300 start, 2% risk, BE after TP1
 """
 
@@ -19,6 +20,7 @@ MAX_BODY_PCT = 9.0
 MAX_PREV_BODY_PCT = 3.0
 COOLDOWN_BARS = 32          # 8ч после любого сигнала по символу
 STOP_COOLDOWN_BARS = 96     # 24ч после STOP по символу
+CONFIRM_BARS = 1            # вход после N свечей подтверждения (стоп не снят)
 CLOSE_IN_RANGE_MAX = 0.35   # close в нижних 35% диапазона свечи
 MIN_BODY_TO_RANGE = 0.50    # тело >= 50% диапазона (не фитильная свеча)
 IMPULSE_STRENGTH = 1.25
@@ -42,9 +44,9 @@ FRESH_ZONE_BARS = 8
 TP1_RR = 1.6
 TP2_RR = 3.0
 
-START_CAPITAL = 300.0   # стартовый депозит $
-RISK_PER_TRADE = 0.02   # риск на сделку 2% от капитала
-BE_AFTER_TP1 = True     # после TP1 стоп → безубыток
+START_CAPITAL = 300.0
+RISK_PER_TRADE = 0.02
+BE_AFTER_TP1 = True
 
 LOOKBACK_DAYS = 30
 MAX_SYMBOLS = 250
@@ -131,7 +133,7 @@ def find_equal_lows(ohlcv, i, atr):
 
 
 def check_at(ohlcv, i):
-    if i < 70 or i >= len(ohlcv) - 1:
+    if i < 70 or i + CONFIRM_BARS >= len(ohlcv) - 1:
         return None
     last, prev = ohlcv[i], ohlcv[i - 1]
     open_p, high_p, low_p, close_p, volume = last[1], last[2], last[3], last[4], last[5]
@@ -173,7 +175,6 @@ def check_at(ohlcv, i):
     if not (close_p < open_p and close_p < prev[4]):
         return None
 
-    # качество свечи: close у низа + доминирующее тело (анти 1-bar death)
     rng = high_p - low_p
     if rng <= 0:
         return None
@@ -187,25 +188,55 @@ def check_at(ohlcv, i):
     if volume < max(prev[5] * CONDITION_D, zone.get("avg_vol", 0) * 1.15):
         return None
 
-    entry = close_p
-    stop = min(high_p + (atr * STOP_ATR_MULT if atr else high_p * 0.005), entry * (1 + MAX_RISK_PCT))
-    risk = stop - entry
-    if risk <= 0:
+    stop = min(high_p + (atr * STOP_ATR_MULT if atr else high_p * 0.005), close_p * (1 + MAX_RISK_PCT))
+    if stop <= close_p:
         return None
 
     return {
-        "ts": last[0], "entry": entry, "stop": stop,
-        "tp1": entry - risk * TP1_RR, "tp2": entry - risk * TP2_RR,
-        "risk": risk, "body_pct": body_pct,
+        "ts": last[0], "raid_close": close_p, "stop": stop,
+        "body_pct": body_pct,
         "zone_score": zone["score"], "zone_touches": zone["touches"],
-        "bar_index": i,
+        "bar_index": i, "raid_high": high_p,
+    }
+
+
+def confirm_entry(ohlcv, cand):
+    """После рейда ждём CONFIRM_BARS. Если стоп снят — reject. Entry = close confirm."""
+    i = cand["bar_index"]
+    stop = cand["stop"]
+    if i + CONFIRM_BARS >= len(ohlcv) - 1:
+        return None
+    for k in range(1, CONFIRM_BARS + 1):
+        bar = ohlcv[i + k]
+        if bar[2] >= stop:
+            return None
+    conf_i = i + CONFIRM_BARS
+    conf = ohlcv[conf_i]
+    entry = conf[4]
+    if entry >= stop:
+        return None
+    risk = stop - entry
+    if risk <= 0:
+        return None
+    if risk / entry > MAX_RISK_PCT:
+        stop = entry * (1 + MAX_RISK_PCT)
+        risk = stop - entry
+    return {
+        "ts": conf[0],
+        "entry": entry,
+        "stop": stop,
+        "tp1": entry - risk * TP1_RR,
+        "tp2": entry - risk * TP2_RR,
+        "risk": risk,
+        "body_pct": cand["body_pct"],
+        "zone_score": cand["zone_score"],
+        "zone_touches": cand["zone_touches"],
+        "bar_index": conf_i,
+        "raid_index": i,
     }
 
 
 def outcome(ohlcv, sig):
-    """Возвращает (result, bars, r_multiple).
-    После TP1 стоп → BE. Half @ TP1 + rest BE = +0.8R.
-    """
     i = sig["bar_index"]
     entry = sig["entry"]
     stop, tp1, tp2 = sig["stop"], sig["tp1"], sig["tp2"]
@@ -270,7 +301,7 @@ def _save_report(lines):
     latest = out_dir / "latest.txt"
     header = [
         f"RAID Backtest report | {stamp} UTC",
-        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | close<={CLOSE_IN_RANGE_MAX} | body/rng>={MIN_BODY_TO_RANGE} | BE | $300",
+        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | confirm={CONFIRM_BARS} | close<={CLOSE_IN_RANGE_MAX} | body/rng>={MIN_BODY_TO_RANGE} | BE | $300",
         f"Days={LOOKBACK_DAYS} | Symbols<={MAX_SYMBOLS}",
         "",
     ]
@@ -282,10 +313,10 @@ def _save_report(lines):
 
 def main():
     print("=" * 64)
-    print("RAID Backtest v8.32")
+    print("RAID Backtest v8.33")
     print(
         f"Days={LOOKBACK_DAYS} | Sym<={MAX_SYMBOLS} | "
-        f"Body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | close<={CLOSE_IN_RANGE_MAX}"
+        f"Body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | confirm={CONFIRM_BARS} | close<={CLOSE_IN_RANGE_MAX}"
     )
     print(f"Capital=${START_CAPITAL:.0f} | Risk={RISK_PER_TRADE*100:.0f}% | BE after TP1={BE_AFTER_TP1}")
     print("=" * 64)
@@ -306,20 +337,23 @@ def main():
 
         found = 0
         last_sig_i = -999
-        stop_ban_until = -1  # index until which symbol is banned after STOP
+        stop_ban_until = -1
         for i in range(70, len(ohlcv) - 8):
             if i - last_sig_i < COOLDOWN_BARS:
                 continue
             if i < stop_ban_until:
                 continue
-            sig = check_at(ohlcv, i)
+            cand = check_at(ohlcv, i)
+            if cand is None:
+                continue
+            sig = confirm_entry(ohlcv, cand)
             if sig is None:
                 continue
             res, bars, r_mult = outcome(ohlcv, sig)
             found += 1
             last_sig_i = i
             if res in ("STOP", "TP1->STOP"):
-                stop_ban_until = i + STOP_COOLDOWN_BARS
+                stop_ban_until = sig["bar_index"] + STOP_COOLDOWN_BARS
             stats[res] += 1
             stats["TOTAL"] += 1
             stats[f"score_{sig['zone_score']}"] += 1
@@ -366,7 +400,6 @@ def main():
         if stats[r]:
             emit(f"  {r:12}: {stats[r]}")
 
-    # хронологический порядок для equity
     all_signals.sort(key=lambda x: x["time"])
 
     capital = START_CAPITAL
