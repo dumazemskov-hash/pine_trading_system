@@ -18,7 +18,7 @@ from tkinter import ttk, scrolledtext, messagebox
 ROOT = Path(__file__).resolve().parent
 SCANNER_DIR = ROOT / "scanner"
 SIGNALS_DIR = ROOT / "signals"
-SCANNER_SCRIPT = SCANNER_DIR / "v8.32-exp.py"
+SCANNER_SCRIPT = SCANNER_DIR / "v8.33-exp.py"
 CHECK_SCRIPT = SCANNER_DIR / "check_signals.py"
 BACKTEST_SCRIPT = SCANNER_DIR / "backtest.py"
 BACKTESTS_DIR = ROOT / "backtests"
@@ -328,7 +328,6 @@ class ControlPanel(tk.Tk):
             self._log("--- push all ---")
             BACKTESTS_DIR.mkdir(exist_ok=True)
             self._run_cmd(["git", "add", "-A"], cwd=str(ROOT))
-            # форсим отчёты бэктеста даже если что-то в ignore
             self._run_cmd(["git", "add", "-f", "--", "backtests"], cwd=str(ROOT))
             r = subprocess.run(
                 [find_git(), "status", "--porcelain"],
