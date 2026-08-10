@@ -20,6 +20,7 @@ SCANNER_DIR = ROOT / "scanner"
 SIGNALS_DIR = ROOT / "signals"
 SCANNER_SCRIPT = SCANNER_DIR / "v8.31-exp.py"
 CHECK_SCRIPT = SCANNER_DIR / "check_signals.py"
+BACKTEST_SCRIPT = SCANNER_DIR / "backtest.py"
 
 if not SCANNER_SCRIPT.exists():
     SCANNER_SCRIPT = SCANNER_DIR / "scanner.py"
@@ -45,7 +46,7 @@ class ControlPanel(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("RAID Hunter — Control Panel")
-        self.geometry("820x560")
+        self.geometry("860x580")
         self.minsize(640, 480)
         self.configure(bg="#1e1e1e")
 
@@ -80,6 +81,7 @@ class ControlPanel(tk.Tk):
             ("Запустить сканер", self.cmd_start_scanner),
             ("Остановить сканер", self.cmd_stop_scanner),
             ("Проверить сигналы", self.cmd_check_signals),
+            ("Бэктест", self.cmd_backtest),
             ("Push логов", self.cmd_push_signals),
             ("Push all", self.cmd_push_all),
             ("Открыть signals", self.cmd_open_signals),
@@ -237,6 +239,42 @@ class ControlPanel(tk.Tk):
                 self._log("check_signals.py не найден в scanner/")
                 return
             self._run_cmd([sys.executable, "-u", str(CHECK_SCRIPT)], cwd=str(SCANNER_DIR))
+        self._run_async(job)
+
+    def cmd_backtest(self):
+        def job():
+            self._log("--- backtest ---")
+            if not BACKTEST_SCRIPT.exists():
+                self._log(f"Не найден: {BACKTEST_SCRIPT}")
+                return
+            self._log("Запуск backtest.py (30 дней, ~250 монет) — это займёт несколько минут...")
+            cwd = str(SCANNER_DIR)
+            args = [sys.executable, "-u", str(BACKTEST_SCRIPT)]
+            self._log("$ " + " ".join(str(a) for a in args))
+            try:
+                p = subprocess.Popen(
+                    args,
+                    cwd=cwd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    bufsize=1,
+                    env=self._env(),
+                )
+                assert p.stdout is not None
+                for line in p.stdout:
+                    line = line.rstrip()
+                    if line:
+                        self._log(line)
+                code = p.wait(timeout=1)
+                if code == 0:
+                    self._log("Бэктест завершён OK")
+                else:
+                    self._log(f"Бэктест exit code {code}")
+            except Exception as e:
+                self._log(f"Ошибка бэктеста: {e}")
         self._run_async(job)
 
     def cmd_push_signals(self):
