@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-RAID Hunter — Historical Backtest v8.32 (confirm OFF)
-body 4-9%, close-strength, stop-cd 24h, equity $300 BE after TP1
-CONFIRM_BARS=0 → immediate entry on raid close
+RAID Hunter — Historical Backtest v8.32
+60 days | top-150 by 24h volume | risk 4% | BE after TP1 | confirm OFF
 """
 
 import ccxt
@@ -17,14 +16,14 @@ MAX_BODY_PCT = 9.0
 MAX_PREV_BODY_PCT = 3.0
 COOLDOWN_BARS = 32
 STOP_COOLDOWN_BARS = 96
-CONFIRM_BARS = 0  # 0 = no confirm (v8.32)
+CONFIRM_BARS = 0
 CLOSE_IN_RANGE_MAX = 0.35
 MIN_BODY_TO_RANGE = 0.50
 IMPULSE_STRENGTH = 1.25
 VOLUME_RATIO = 1.7
 PRIOR_VOLUME_MULT = 1.35
 CONDITION_D = 0.60
-MAX_RISK_PCT = 0.02
+MAX_RISK_PCT = 0.04
 
 EQL_LOOKBACK = 20
 SWING_N = 2
@@ -42,11 +41,11 @@ TP1_RR = 1.6
 TP2_RR = 3.0
 
 START_CAPITAL = 300.0
-RISK_PER_TRADE = 0.02
+RISK_PER_TRADE = 0.04
 BE_AFTER_TP1 = True
 
-LOOKBACK_DAYS = 30
-MAX_SYMBOLS = 250
+LOOKBACK_DAYS = 60
+MAX_SYMBOLS = 150
 BARS_LIMIT = 96 * LOOKBACK_DAYS + 80
 SLEEP = 0.10
 
@@ -196,7 +195,6 @@ def check_at(ohlcv, i):
 
 
 def confirm_entry(ohlcv, cand):
-    """CONFIRM_BARS=0 → entry on raid close."""
     i = cand["bar_index"]
     stop = cand["stop"]
     if CONFIRM_BARS <= 0:
@@ -257,14 +255,32 @@ def outcome(ohlcv, sig):
 
 
 def top_symbols(n=MAX_SYMBOLS):
-    print("Загружаю рынки...")
+    print("Загружаю рынки + тикеры (volume)...")
     markets = exchange.load_markets()
-    symbols = [
+    candidates = [
         s for s, m in markets.items()
         if m.get("swap") and m.get("quote") == "USDT" and m.get("active") and s.endswith(":USDT")
     ]
-    print(f"Символов для прогона: {len(symbols[:n])}")
-    return symbols[:n]
+    try:
+        tickers = exchange.fetch_tickers(candidates)
+    except Exception as e:
+        print(f"tickers fail ({e}), беру первые {n}")
+        return candidates[:n]
+    ranked = []
+    for s in candidates:
+        tk = tickers.get(s) or {}
+        vol = tk.get("quoteVolume") or 0
+        try:
+            vol = float(vol)
+        except (TypeError, ValueError):
+            vol = 0.0
+        ranked.append((vol, s))
+    ranked.sort(reverse=True)
+    symbols = [s for _, s in ranked[:n]]
+    print(f"Топ-{len(symbols)} по 24h volume:")
+    for vol, s in ranked[:10]:
+        print(f"  {s.split('/')[0]:12} vol≈{vol:,.0f}")
+    return symbols
 
 
 def fetch_ohlcv_full(symbol, need):
@@ -294,8 +310,8 @@ def _save_report(lines):
     latest = out_dir / "latest.txt"
     header = [
         f"RAID Backtest report | {stamp} UTC",
-        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | confirm={CONFIRM_BARS} | close<={CLOSE_IN_RANGE_MAX} | BE | $300",
-        f"Days={LOOKBACK_DAYS} | Symbols<={MAX_SYMBOLS}",
+        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | confirm={CONFIRM_BARS} | close<={CLOSE_IN_RANGE_MAX} | risk={RISK_PER_TRADE*100:.0f}% | BE | $300",
+        f"Days={LOOKBACK_DAYS} | Symbols=top{MAX_SYMBOLS} by volume",
         "",
     ]
     text = "\n".join(header + lines) + "\n"
@@ -306,8 +322,8 @@ def _save_report(lines):
 
 def main():
     print("=" * 64)
-    print("RAID Backtest v8.32 (confirm OFF)")
-    print(f"Days={LOOKBACK_DAYS} | confirm={CONFIRM_BARS} | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS}")
+    print("RAID Backtest v8.32 | 60d | top-volume | risk 4%")
+    print(f"Days={LOOKBACK_DAYS} | Sym=top{MAX_SYMBOLS} | confirm={CONFIRM_BARS}")
     print(f"Capital=${START_CAPITAL:.0f} | Risk={RISK_PER_TRADE*100:.0f}% | BE={BE_AFTER_TP1}")
     print("=" * 64)
 
@@ -361,9 +377,13 @@ def main():
 
     lines = []
     def emit(s=""):
-        print(s); lines.append(s)
+        print(s)
+        lines.append(s)
 
-    emit(""); emit("=" * 64); emit("SUMMARY"); emit("=" * 64)
+    emit("")
+    emit("=" * 64)
+    emit("SUMMARY")
+    emit("=" * 64)
     total = stats["TOTAL"]
     if total == 0:
         emit("Сигналов не найдено.")
@@ -386,7 +406,8 @@ def main():
     capital = START_CAPITAL
     peak = capital
     max_dd = 0.0
-    emit(""); emit("--- Equity ($300 start, 2% risk, BE after TP1) ---")
+    emit("")
+    emit("--- Equity ($300 start, 4% risk, BE after TP1) ---")
     emit(f"{'time':16} {'sym':12} {'result':10} {'R':>6} {'risk$':>8} {'pnl$':>8} {'equity':>10}")
     for s in all_signals:
         risk_usd = capital * RISK_PER_TRADE
@@ -403,10 +424,12 @@ def main():
     emit(f"Total R:   {total_r:+.1f}R")
     emit(f"Avg R:     {total_r/total:+.2f}R")
     emit(f"Max DD:    {max_dd:.1f}%")
-    emit(""); emit("--- Детальный список ---")
+    emit("")
+    emit("--- Детальный список ---")
     for s in all_signals:
         emit(f"{s['time']} | {s['symbol']:12} | sc={s['score']} t={s['touches']} body={s['body']:5.1f}% | {s['result']:10} | {s['bars']} bars | {s['r']:+.1f}R")
-    emit("=" * 64); emit("Готово.")
+    emit("=" * 64)
+    emit("Готово.")
     print(f"Отчёт сохранён: {_save_report(lines)}")
 
 
