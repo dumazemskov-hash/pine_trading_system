@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-RAID Hunter — Historical Backtest v8.31
-Фильтры: body 4-9%, prev_pump<=3%, cooldown 12
+RAID Hunter — Historical Backtest v8.32
+Фильтры: body 4-9%, prev<=3%, cooldown 32,
+         close in bottom 35% of range, body/range>=50%,
+         STOP-cooldown 96 bars (24h) per symbol
 Equity: $300 start, 2% risk, BE after TP1
 """
 
@@ -15,7 +17,10 @@ TIMEFRAME = "15m"
 MIN_BODY_PCT = 4.0
 MAX_BODY_PCT = 9.0
 MAX_PREV_BODY_PCT = 3.0
-COOLDOWN_BARS = 12
+COOLDOWN_BARS = 32          # 8ч после любого сигнала по символу
+STOP_COOLDOWN_BARS = 96     # 24ч после STOP по символу
+CLOSE_IN_RANGE_MAX = 0.35   # close в нижних 35% диапазона свечи
+MIN_BODY_TO_RANGE = 0.50    # тело >= 50% диапазона (не фитильная свеча)
 IMPULSE_STRENGTH = 1.25
 VOLUME_RATIO = 1.7
 PRIOR_VOLUME_MULT = 1.35
@@ -37,9 +42,9 @@ FRESH_ZONE_BARS = 8
 TP1_RR = 1.6
 TP2_RR = 3.0
 
-START_CAPITAL = 300.0
-RISK_PER_TRADE = 0.02
-BE_AFTER_TP1 = True
+START_CAPITAL = 300.0   # стартовый депозит $
+RISK_PER_TRADE = 0.02   # риск на сделку 2% от капитала
+BE_AFTER_TP1 = True     # после TP1 стоп → безубыток
 
 LOOKBACK_DAYS = 30
 MAX_SYMBOLS = 250
@@ -168,6 +173,17 @@ def check_at(ohlcv, i):
     if not (close_p < open_p and close_p < prev[4]):
         return None
 
+    # качество свечи: close у низа + доминирующее тело (анти 1-bar death)
+    rng = high_p - low_p
+    if rng <= 0:
+        return None
+    close_pos = (close_p - low_p) / rng
+    if close_pos > CLOSE_IN_RANGE_MAX:
+        return None
+    body = abs(close_p - open_p)
+    if body / rng < MIN_BODY_TO_RANGE:
+        return None
+
     if volume < max(prev[5] * CONDITION_D, zone.get("avg_vol", 0) * 1.15):
         return None
 
@@ -187,7 +203,9 @@ def check_at(ohlcv, i):
 
 
 def outcome(ohlcv, sig):
-    """(result, bars, r_multiple). После TP1 стоп → BE."""
+    """Возвращает (result, bars, r_multiple).
+    После TP1 стоп → BE. Half @ TP1 + rest BE = +0.8R.
+    """
     i = sig["bar_index"]
     entry = sig["entry"]
     stop, tp1, tp2 = sig["stop"], sig["tp1"], sig["tp2"]
@@ -198,7 +216,7 @@ def outcome(ohlcv, sig):
         eff_stop = entry if (tp1_hit and BE_AFTER_TP1) else stop
         if high >= eff_stop:
             if tp1_hit and BE_AFTER_TP1:
-                return ("TP1->BE", bars, TP1_RR * 0.5)  # half closed at TP1, rest BE
+                return ("TP1->BE", bars, TP1_RR * 0.5)
             if tp1_hit:
                 return ("TP1->STOP", bars, TP1_RR * 0.5 - 0.5)
             return ("STOP", bars, -1.0)
@@ -252,7 +270,7 @@ def _save_report(lines):
     latest = out_dir / "latest.txt"
     header = [
         f"RAID Backtest report | {stamp} UTC",
-        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS} | BE after TP1 | $300 start",
+        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | close<={CLOSE_IN_RANGE_MAX} | body/rng>={MIN_BODY_TO_RANGE} | BE | $300",
         f"Days={LOOKBACK_DAYS} | Symbols<={MAX_SYMBOLS}",
         "",
     ]
@@ -264,10 +282,10 @@ def _save_report(lines):
 
 def main():
     print("=" * 64)
-    print("RAID Backtest v8.31 + Equity")
+    print("RAID Backtest v8.32")
     print(
         f"Days={LOOKBACK_DAYS} | Sym<={MAX_SYMBOLS} | "
-        f"Body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS}"
+        f"Body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | close<={CLOSE_IN_RANGE_MAX}"
     )
     print(f"Capital=${START_CAPITAL:.0f} | Risk={RISK_PER_TRADE*100:.0f}% | BE after TP1={BE_AFTER_TP1}")
     print("=" * 64)
@@ -288,8 +306,11 @@ def main():
 
         found = 0
         last_sig_i = -999
+        stop_ban_until = -1  # index until which symbol is banned after STOP
         for i in range(70, len(ohlcv) - 8):
             if i - last_sig_i < COOLDOWN_BARS:
+                continue
+            if i < stop_ban_until:
                 continue
             sig = check_at(ohlcv, i)
             if sig is None:
@@ -297,6 +318,8 @@ def main():
             res, bars, r_mult = outcome(ohlcv, sig)
             found += 1
             last_sig_i = i
+            if res in ("STOP", "TP1->STOP"):
+                stop_ban_until = i + STOP_COOLDOWN_BARS
             stats[res] += 1
             stats["TOTAL"] += 1
             stats[f"score_{sig['zone_score']}"] += 1
@@ -342,6 +365,9 @@ def main():
     for r in ["TP2", "TP1+TP2", "TP1", "TP1->BE", "TP1->STOP", "STOP", "OPEN"]:
         if stats[r]:
             emit(f"  {r:12}: {stats[r]}")
+
+    # хронологический порядок для equity
+    all_signals.sort(key=lambda x: x["time"])
 
     capital = START_CAPITAL
     peak = capital
