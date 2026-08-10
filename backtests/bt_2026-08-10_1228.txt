@@ -1,0 +1,48 @@
+RAID Backtest report | 2026-08-10_1228 UTC
+Filters: body 4.0-9.0% | prev<=3.0% | cd=12
+Days=30 | Symbols<=250
+
+
+================================================================
+SUMMARY
+================================================================
+Всего сигналов: 26
+Wins (TP1/TP2):  10  (38.5%)
+Losses (STOP):   16  (61.5%)
+OPEN:            0
+
+  TP2         : 4
+  TP1+TP2     : 5
+  TP1         : 1
+  TP1->STOP   : 1
+  STOP        : 15
+
+--- Детальный список ---
+2026-08-02 14:00 | AIO          | sc=3 t=2 body=  8.1% | TP2        | 1 bars
+2026-07-25 13:15 | ALLO         | sc=2 t=2 body=  7.0% | STOP       | 1 bars
+2026-08-04 13:30 | AMC          | sc=3 t=2 body=  4.5% | STOP       | 2 bars
+2026-07-25 07:30 | API3         | sc=3 t=2 body=  7.9% | STOP       | 1 bars
+2026-07-13 03:15 | APR          | sc=2 t=2 body=  5.7% | TP1+TP2    | 12 bars
+2026-07-24 15:00 | APR          | sc=2 t=2 body=  4.9% | STOP       | 1 bars
+2026-07-14 13:30 | ARM          | sc=2 t=2 body=  6.8% | TP1+TP2    | 103 bars
+2026-07-28 13:30 | AXTI         | sc=3 t=2 body=  7.5% | STOP       | 5 bars
+2026-07-23 13:15 | B2           | sc=2 t=2 body=  6.4% | STOP       | 2 bars
+2026-07-25 10:15 | B2           | sc=3 t=3 body=  7.8% | TP1->STOP  | 4 bars
+2026-07-30 07:15 | BANK         | sc=3 t=3 body=  4.6% | TP2        | 1 bars
+2026-08-08 15:00 | BAN          | sc=3 t=3 body=  6.9% | TP1        | 181 bars
+2026-08-07 13:45 | BE           | sc=2 t=2 body=  4.2% | TP1+TP2    | 3 bars
+2026-07-19 14:00 | BLESS        | sc=2 t=2 body=  4.4% | STOP       | 8 bars
+2026-08-05 15:00 | BLESS        | sc=2 t=2 body=  7.4% | STOP       | 1 bars
+2026-07-13 03:00 | BSB          | sc=2 t=2 body=  5.7% | TP2        | 4 bars
+2026-08-08 05:15 | BSB          | sc=3 t=2 body=  6.5% | TP2        | 1 bars
+2026-08-06 08:00 | CAP          | sc=3 t=2 body=  8.0% | STOP       | 11 bars
+2026-07-14 13:30 | CBRS         | sc=2 t=2 body=  5.8% | STOP       | 1 bars
+2026-07-27 13:30 | CBRS         | sc=2 t=2 body=  5.3% | STOP       | 1 bars
+2026-08-05 10:00 | COAI         | sc=3 t=3 body=  4.4% | STOP       | 3 bars
+2026-08-09 13:30 | COOKIE       | sc=3 t=2 body=  5.4% | STOP       | 3 bars
+2026-07-23 15:00 | DEXE         | sc=3 t=2 body=  4.7% | TP1+TP2    | 2 bars
+2026-07-25 10:00 | ESPORTS      | sc=3 t=2 body=  5.4% | STOP       | 1 bars
+2026-08-05 11:30 | ESPORTS      | sc=4 t=3 body=  4.1% | STOP       | 1 bars
+2026-07-25 15:00 | EUL          | sc=2 t=2 body=  4.6% | TP1+TP2    | 2 bars
+================================================================
+Готово.
