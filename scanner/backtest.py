@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 RAID Hunter — Historical Backtest v8.32
-60 days | top-150 by 24h volume | risk 4% | BE after TP1 | confirm OFF
+Q1 2026 (2026-01-01 → 2026-03-31) | top-150 volume | risk 4% | BE | confirm OFF
 """
 
 import ccxt
@@ -44,15 +44,25 @@ START_CAPITAL = 300.0
 RISK_PER_TRADE = 0.04
 BE_AFTER_TP1 = True
 
-LOOKBACK_DAYS = 60
+RANGE_START = "2026-01-01T00:00:00Z"
+RANGE_END   = "2026-04-01T00:00:00Z"
 MAX_SYMBOLS = 150
-BARS_LIMIT = 96 * LOOKBACK_DAYS + 80
-SLEEP = 0.10
+SLEEP = 0.12
+WARMUP_BARS = 80
 
 exchange = ccxt.bybit({
     "enableRateLimit": True,
     "options": {"defaultType": "swap", "fetchMarkets": ["linear"]},
 })
+
+
+def ms(iso):
+    return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp() * 1000)
+
+
+START_MS = ms(RANGE_START)
+END_MS = ms(RANGE_END)
+BARS_NEEDED = int((END_MS - START_MS) / (15 * 60 * 1000)) + WARMUP_BARS + 50
 
 
 def calc_atr(ohlcv, i, period=14):
@@ -130,6 +140,8 @@ def find_equal_lows(ohlcv, i, atr):
 
 def check_at(ohlcv, i):
     if i < 70 or i + max(CONFIRM_BARS, 0) >= len(ohlcv) - 1:
+        return None
+    if ohlcv[i][0] < START_MS or ohlcv[i][0] >= END_MS:
         return None
     last, prev = ohlcv[i], ohlcv[i - 1]
     open_p, high_p, low_p, close_p, volume = last[1], last[2], last[3], last[4], last[5]
@@ -283,22 +295,33 @@ def top_symbols(n=MAX_SYMBOLS):
     return symbols
 
 
-def fetch_ohlcv_full(symbol, need):
-    ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=min(need, 1000))
-    while len(ohlcv) < need:
-        earliest = ohlcv[0][0]
-        chunk = exchange.fetch_ohlcv(
-            symbol, timeframe=TIMEFRAME, limit=1000,
-            since=earliest - 1000 * 15 * 60 * 1000,
-        )
+def fetch_ohlcv_range(symbol):
+    since = START_MS - WARMUP_BARS * 15 * 60 * 1000
+    until = END_MS + 50 * 15 * 60 * 1000
+    ohlcv = []
+    cursor = since
+    while cursor < until:
+        try:
+            chunk = exchange.fetch_ohlcv(
+                symbol, timeframe=TIMEFRAME, since=cursor, limit=1000
+            )
+        except Exception as e:
+            if not ohlcv:
+                raise
+            break
         if not chunk:
             break
-        chunk = [c for c in chunk if c[0] < earliest]
+        if ohlcv and chunk[0][0] <= ohlcv[-1][0]:
+            chunk = [c for c in chunk if c[0] > ohlcv[-1][0]]
         if not chunk:
             break
-        ohlcv = chunk + ohlcv
+        ohlcv.extend(chunk)
+        last_ts = chunk[-1][0]
+        if last_ts >= until or len(chunk) < 1000:
+            break
+        cursor = last_ts + 15 * 60 * 1000
         time.sleep(SLEEP)
-    return ohlcv[-need:]
+    return [c for c in ohlcv if c[0] >= since and c[0] <= until]
 
 
 def _save_report(lines):
@@ -306,12 +329,13 @@ def _save_report(lines):
     out_dir = root / "backtests"
     out_dir.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-    path = out_dir / f"bt_{stamp}.txt"
+    path = out_dir / f"bt_Q1_2026_{stamp}.txt"
     latest = out_dir / "latest.txt"
     header = [
         f"RAID Backtest report | {stamp} UTC",
-        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | confirm={CONFIRM_BARS} | close<={CLOSE_IN_RANGE_MAX} | risk={RISK_PER_TRADE*100:.0f}% | BE | $300",
-        f"Days={LOOKBACK_DAYS} | Symbols=top{MAX_SYMBOLS} by volume",
+        f"RANGE: Q1 2026 ({RANGE_START[:10]} → {RANGE_END[:10]})",
+        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | confirm={CONFIRM_BARS} | risk={RISK_PER_TRADE*100:.0f}% | BE | $300",
+        f"Symbols=top{MAX_SYMBOLS} by volume",
         "",
     ]
     text = "\n".join(header + lines) + "\n"
@@ -322,9 +346,10 @@ def _save_report(lines):
 
 def main():
     print("=" * 64)
-    print("RAID Backtest v8.32 | 60d | top-volume | risk 4%")
-    print(f"Days={LOOKBACK_DAYS} | Sym=top{MAX_SYMBOLS} | confirm={CONFIRM_BARS}")
-    print(f"Capital=${START_CAPITAL:.0f} | Risk={RISK_PER_TRADE*100:.0f}% | BE={BE_AFTER_TP1}")
+    print("RAID Backtest v8.32 | Q1 2026 (full quarter)")
+    print(f"Range: {RANGE_START[:10]} → {RANGE_END[:10]}")
+    print(f"Sym=top{MAX_SYMBOLS} | Risk={RISK_PER_TRADE*100:.0f}% | BE={BE_AFTER_TP1}")
+    print(f"Bars needed ≈ {BARS_NEEDED} per symbol — это займёт время")
     print("=" * 64)
 
     symbols = top_symbols()
@@ -333,11 +358,12 @@ def main():
 
     for idx, symbol in enumerate(symbols, 1):
         try:
-            ohlcv = fetch_ohlcv_full(symbol, min(BARS_LIMIT, 3000))
+            ohlcv = fetch_ohlcv_range(symbol)
         except Exception as e:
             print(f"[{idx}/{len(symbols)}] {symbol}: skip ({e})")
             continue
         if len(ohlcv) < 100:
+            print(f"[{idx}/{len(symbols)}] {symbol.split('/')[0]}: мало данных ({len(ohlcv)})")
             continue
 
         found = 0
@@ -372,7 +398,7 @@ def main():
             })
             print(f"  {ts} | {name:12} | score={sig['zone_score']} | {res:10} | bars={bars} | {r_mult:+.1f}R")
 
-        print(f"[{idx}/{len(symbols)}] {symbol.split('/')[0]}: {found} signals")
+        print(f"[{idx}/{len(symbols)}] {symbol.split('/')[0]}: {found} signals | bars={len(ohlcv)}")
         time.sleep(SLEEP)
 
     lines = []
@@ -382,7 +408,7 @@ def main():
 
     emit("")
     emit("=" * 64)
-    emit("SUMMARY")
+    emit("SUMMARY  |  Q1 2026")
     emit("=" * 64)
     total = stats["TOTAL"]
     if total == 0:
