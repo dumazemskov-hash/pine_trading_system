@@ -18,7 +18,7 @@ from tkinter import ttk, scrolledtext, messagebox
 ROOT = Path(__file__).resolve().parent
 SCANNER_DIR = ROOT / "scanner"
 SIGNALS_DIR = ROOT / "signals"
-SCANNER_SCRIPT = SCANNER_DIR / "v8.31-exp.py"
+SCANNER_SCRIPT = SCANNER_DIR / "v8.32-exp.py"
 CHECK_SCRIPT = SCANNER_DIR / "check_signals.py"
 BACKTEST_SCRIPT = SCANNER_DIR / "backtest.py"
 BACKTESTS_DIR = ROOT / "backtests"
@@ -326,9 +326,10 @@ class ControlPanel(tk.Tk):
     def cmd_push_all(self):
         def job():
             self._log("--- push all ---")
-            if not self._run_cmd(["git", "add", "-A"], cwd=str(ROOT)):
-                self._log("git add -A не удался")
-                return
+            BACKTESTS_DIR.mkdir(exist_ok=True)
+            self._run_cmd(["git", "add", "-A"], cwd=str(ROOT))
+            # форсим отчёты бэктеста даже если что-то в ignore
+            self._run_cmd(["git", "add", "-f", "--", "backtests"], cwd=str(ROOT))
             r = subprocess.run(
                 [find_git(), "status", "--porcelain"],
                 cwd=str(ROOT),
@@ -338,16 +339,16 @@ class ControlPanel(tk.Tk):
                 errors="replace",
                 env=self._env(),
             )
-            if not (r.stdout or "").strip():
-                self._log("Нет изменений для пуша")
-                return
-            for line in (r.stdout or "").strip().splitlines()[:20]:
-                self._log("  " + line)
-            msg = f"update {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-            if not self._run_cmd(["git", "commit", "-m", msg], cwd=str(ROOT)):
-                self._log("commit не удался")
-                return
+            dirty = (r.stdout or "").strip()
+            if dirty:
+                for line in dirty.splitlines()[:30]:
+                    self._log("  " + line)
+                msg = f"update {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+                self._run_cmd(["git", "commit", "-m", msg], cwd=str(ROOT))
+            else:
+                self._log("Рабочее дерево чистое")
             self._run_cmd(["git", "push"], cwd=str(ROOT))
+            self._run_cmd(["git", "status", "-sb"], cwd=str(ROOT))
         self._run_async(job)
 
     def cmd_open_signals(self):
