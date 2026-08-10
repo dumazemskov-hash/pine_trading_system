@@ -6,29 +6,23 @@ import os
 from datetime import datetime, timezone
 
 # === RAID Hunter v8.32-exp ===
-# На базе v8.31 + close-strength + longer cooldown:
-#   MAX_BODY, MAX_PREV_BODY, COOLDOWN
-# При каждом сигнале пишем в signals/YYYY-MM-DD.jsonl:
-#   - все параметры сигнала
-#   - последние 40 свечей (OHLCV)
-#   - данные зоны Equal Lows
-#   - ATR, объёмы, метрики
+# close-strength + cooldown 32 + risk 4%
 
 TELEGRAM_TOKEN = "8821282524:AAG7OKFKdzks0qy2WdqBi4gU2dV62Isp90k"
 CHAT_ID = "401292001"
 
 TIMEFRAME = "15m"
 MIN_BODY_PCT = 4.0
-MAX_BODY_PCT = 9.0          # body > 9% → skip (BEAT/BLUAI-тип)
-MAX_PREV_BODY_PCT = 3.0     # prev не должен быть сильным пампом
-COOLDOWN_BARS = 32          # 8ч после сигнала по символу
-CLOSE_IN_RANGE_MAX = 0.35   # close в нижних 35% диапазона
-MIN_BODY_TO_RANGE = 0.50    # тело >= 50% диапазона
+MAX_BODY_PCT = 9.0
+MAX_PREV_BODY_PCT = 3.0
+COOLDOWN_BARS = 32
+CLOSE_IN_RANGE_MAX = 0.35
+MIN_BODY_TO_RANGE = 0.50
 IMPULSE_STRENGTH = 1.25
 VOLUME_RATIO = 1.7
 PRIOR_VOLUME_MULT = 1.35
 CONDITION_D = 0.60
-MAX_RISK_PCT = 0.02
+MAX_RISK_PCT = 0.04  # 4% risk (live)
 
 EQL_LOOKBACK = 20
 SWING_N = 2
@@ -45,18 +39,15 @@ FRESH_ZONE_BARS = 8
 TP1_RR = 1.6
 TP2_RR = 3.0
 
-CANDLES_TO_LOG = 40  # сколько последних свечей сохранять в лог
+CANDLES_TO_LOG = 40
 
 exchange = ccxt.bybit({
     "enableRateLimit": True,
-    "options": {
-        "defaultType": "swap",
-        "fetchMarkets": ["linear"],
-    }
+    "options": {"defaultType": "swap", "fetchMarkets": ["linear"]},
 })
 
 sent_signals = set()
-last_signal_bar = {}  # symbol -> bar_ts последнего сигнала
+last_signal_bar = {}
 
 SIGNALS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "signals")
 os.makedirs(SIGNALS_DIR, exist_ok=True)
@@ -70,23 +61,15 @@ def send_telegram(message: str):
         print(f"Ошибка Telegram: {e}")
 
 
-def log_signal(signal: dict, ohlcv: list, atr: float | None):
-    """Пишет полный контекст сигнала в signals/YYYY-MM-DD.jsonl"""
+def log_signal(signal: dict, ohlcv: list, atr):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     path = os.path.join(SIGNALS_DIR, f"{today}.jsonl")
-
-    # последние N свечей (timestamp, open, high, low, close, volume)
     recent = []
     for c in ohlcv[-CANDLES_TO_LOG:]:
         recent.append({
-            "ts": c[0],
-            "o": round(c[1], 8),
-            "h": round(c[2], 8),
-            "l": round(c[3], 8),
-            "c": round(c[4], 8),
-            "v": round(c[5], 4),
+            "ts": c[0], "o": round(c[1], 8), "h": round(c[2], 8),
+            "l": round(c[3], 8), "c": round(c[4], 8), "v": round(c[5], 4),
         })
-
     record = {
         "logged_at": datetime.now(timezone.utc).isoformat(),
         "version": "v8.32-exp",
@@ -105,9 +88,9 @@ def log_signal(signal: dict, ohlcv: list, atr: float | None):
         "zone_avg_vol": signal.get("zone_avg_vol"),
         "bar_ts": signal["bar_ts"],
         "atr": atr,
+        "max_risk_pct": MAX_RISK_PCT,
         "candles": recent,
     }
-
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
     print(f"  log → {path}")
@@ -135,9 +118,6 @@ def calc_atr(ohlcv, period=14):
 
 
 def is_swing_low(ohlcv, i, n=SWING_N):
-    if i + n >= 0:
-        # relative negative index safety
-        pass
     try:
         low = ohlcv[i][3]
         for k in range(1, n + 1):
@@ -151,90 +131,51 @@ def is_swing_low(ohlcv, i, n=SWING_N):
 def find_equal_lows(ohlcv, atr):
     if len(ohlcv) < EQL_LOOKBACK + SWING_N * 2 + 2:
         return None
-
     end = -1
     start = end - EQL_LOOKBACK
-
     swings = []
     for i in range(start + SWING_N, end - SWING_N + 1):
         if is_swing_low(ohlcv, i, SWING_N):
-            swings.append({
-                "price": ohlcv[i][3],
-                "volume": ohlcv[i][5],
-                "index": i
-            })
-
+            swings.append({"price": ohlcv[i][3], "volume": ohlcv[i][5], "index": i})
     if len(swings) < 2:
         return None
-
     ref_price = ohlcv[end][4]
-    tolerance = max(
-        (atr * EQL_TOLERANCE_ATR) if atr else 0,
-        ref_price * EQL_TOLERANCE_PCT
-    )
+    tolerance = max((atr * EQL_TOLERANCE_ATR) if atr else 0, ref_price * EQL_TOLERANCE_PCT)
     if tolerance <= 0:
         return None
-
-    best_zone = None
-    best_score = 0
-
+    best_zone, best_score = None, 0
     for i in range(len(swings)):
         cluster = [swings[i]]
         for j in range(len(swings)):
             if i == j:
                 continue
-            price_ok = abs(swings[j]["price"] - swings[i]["price"]) <= tolerance
-            time_ok = abs(swings[j]["index"] - swings[i]["index"]) <= MAX_CLUSTER_SPAN
-            dist_ok = abs(swings[j]["index"] - swings[i]["index"]) >= MIN_TOUCH_DISTANCE
-            if price_ok and time_ok and dist_ok:
+            if (abs(swings[j]["price"] - swings[i]["price"]) <= tolerance
+                    and abs(swings[j]["index"] - swings[i]["index"]) <= MAX_CLUSTER_SPAN
+                    and abs(swings[j]["index"] - swings[i]["index"]) >= MIN_TOUCH_DISTANCE):
                 if not any(c["index"] == swings[j]["index"] for c in cluster):
                     cluster.append(swings[j])
-
         if len(cluster) < 2:
             continue
-
         idxs = sorted(c["index"] for c in cluster)
-        too_close = False
-        for a, b in zip(idxs, idxs[1:]):
-            if abs(b - a) < MIN_TOUCH_DISTANCE:
-                too_close = True
-                break
-        if too_close:
+        if any(abs(b - a) < MIN_TOUCH_DISTANCE for a, b in zip(idxs, idxs[1:])):
             continue
-
         zone_low = min(c["price"] for c in cluster)
         touches = len(cluster)
         avg_vol = sum(c["volume"] for c in cluster) / touches
         vol_ma = sum(c[5] for c in ohlcv[-21:-1]) / 20 if len(ohlcv) >= 22 else avg_vol
         is_fresh = any(c["index"] >= -FRESH_ZONE_BARS for c in cluster)
-
         if not is_fresh:
             continue
-
-        score = 0
-        if touches == 2:
-            score += 1
-        elif touches == 3:
-            score += 2
-        else:
-            score += 3
+        score = (1 if touches == 2 else 2 if touches == 3 else 3)
         if avg_vol >= vol_ma * 1.2:
             score += 1
         if is_fresh:
             score += 1
-
         if score > best_score:
             best_score = score
-            best_zone = {
-                "zone_low": zone_low,
-                "score": score,
-                "touches": touches,
-                "avg_vol": avg_vol
-            }
-
+            best_zone = {"zone_low": zone_low, "score": score, "touches": touches, "avg_vol": avg_vol}
     if best_zone is None or best_zone["score"] < MIN_ZONE_SCORE:
         return None
-
     return best_zone
 
 
@@ -247,25 +188,14 @@ def calculate_stop(entry, high, atr):
 def check_signal(symbol, ohlcv_raw):
     if len(ohlcv_raw) < 75:
         return None
-
     ohlcv = ohlcv_raw[:-1]
-
-    last = ohlcv[-1]
-    prev = ohlcv[-2]
-
-    open_p = last[1]
-    high_p = last[2]
-    low_p = last[3]
-    close_p = last[4]
-    volume = last[5]
+    last, prev = ohlcv[-1], ohlcv[-2]
+    open_p, high_p, low_p, close_p, volume = last[1], last[2], last[3], last[4], last[5]
 
     body_pct = abs(close_p - open_p) / open_p * 100
-    if body_pct < MIN_BODY_PCT:
-        return None
-    if body_pct > MAX_BODY_PCT:
+    if body_pct < MIN_BODY_PCT or body_pct > MAX_BODY_PCT:
         return None
 
-    # prev не должен быть сильным пампом (pump→dump ловушка)
     prev_body = (prev[4] - prev[1]) / prev[1] * 100 if prev[1] else 0
     if prev_body > MAX_PREV_BODY_PCT:
         return None
@@ -296,23 +226,18 @@ def check_signal(symbol, ohlcv_raw):
     if low_p > min(recent_lows):
         return None
 
-    bearish = close_p < open_p and close_p < prev[4]
-    if not bearish:
+    if not (close_p < open_p and close_p < prev[4]):
         return None
 
-    # качество свечи: close у низа + доминирующее тело
     rng = high_p - low_p
     if rng <= 0:
         return None
-    close_pos = (close_p - low_p) / rng
-    if close_pos > CLOSE_IN_RANGE_MAX:
+    if (close_p - low_p) / rng > CLOSE_IN_RANGE_MAX:
         return None
-    body = abs(close_p - open_p)
-    if body / rng < MIN_BODY_TO_RANGE:
+    if abs(close_p - open_p) / rng < MIN_BODY_TO_RANGE:
         return None
 
-    zone_vol_threshold = zone.get("avg_vol", 0) * 1.15
-    if volume < max(prev[5] * CONDITION_D, zone_vol_threshold):
+    if volume < max(prev[5] * CONDITION_D, zone.get("avg_vol", 0) * 1.15):
         return None
 
     entry = close_p
@@ -321,15 +246,12 @@ def check_signal(symbol, ohlcv_raw):
     if risk <= 0:
         return None
 
-    tp1 = entry - risk * TP1_RR
-    tp2 = entry - risk * TP2_RR
-
     return {
         "symbol": symbol,
         "entry": entry,
         "stop": stop,
-        "tp1": tp1,
-        "tp2": tp2,
+        "tp1": entry - risk * TP1_RR,
+        "tp2": entry - risk * TP2_RR,
         "risk": risk,
         "body_pct": body_pct,
         "zone_score": zone["score"],
@@ -338,13 +260,13 @@ def check_signal(symbol, ohlcv_raw):
         "zone_avg_vol": zone.get("avg_vol"),
         "bar_ts": last[0],
         "atr": atr,
-        "ohlcv_closed": ohlcv,  # для лога
+        "ohlcv_closed": ohlcv,
     }
 
 
 def main():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] === Scanner v8.32-exp запущен ===")
-    print("v8.32 | body 4-9% | close-strength | cooldown 32 | Score>=2 | full log")
+    print("v8.32 | body 4-9% | close-strength | cd=32 | risk 4% | full log")
 
     symbols = get_symbols()
 
@@ -353,7 +275,6 @@ def main():
             try:
                 ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=90)
                 signal = check_signal(symbol, ohlcv)
-
                 if signal is None:
                     continue
 
@@ -361,7 +282,6 @@ def main():
                 if signal_id in sent_signals:
                     continue
 
-                # cooldown по символу
                 last_ts = last_signal_bar.get(symbol)
                 if last_ts is not None:
                     bars_since = (signal["bar_ts"] - last_ts) / (15 * 60 * 1000)
@@ -371,12 +291,11 @@ def main():
                 sent_signals.add(signal_id)
                 last_signal_bar[symbol] = signal["bar_ts"]
 
-                # Логируем полный контекст
                 log_signal(signal, signal["ohlcv_closed"], signal.get("atr"))
 
                 risk_pct = signal["risk"] / signal["entry"] * 100
                 msg = (
-                    f"RAID v8.32-exp | {symbol}\n"
+                    f"RAID v8.32 | risk4% | {symbol}\n"
                     f"Entry: {signal['entry']:.6f}\n"
                     f"Stop:  {signal['stop']:.6f}\n"
                     f"TP1:   {signal['tp1']:.6f} | TP2: {signal['tp2']:.6f}\n"
@@ -384,9 +303,8 @@ def main():
                     f"Body:  {signal['body_pct']:.2f}%\n"
                     f"Zone:  score={signal['zone_score']} | touches={signal['zone_touches']}"
                 )
-
                 send_telegram(msg)
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] SIGNAL → {symbol} | score={signal['zone_score']} touches={signal['zone_touches']}")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] SIGNAL → {symbol} | score={signal['zone_score']} | risk={risk_pct:.2f}%")
 
             except Exception:
                 pass
