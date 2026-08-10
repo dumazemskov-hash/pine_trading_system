@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-RAID Hunter — Historical Backtest
-Прогон логики v8.30-exp по истории 15m Bybit.
-Запуск: python backtest.py
+RAID Hunter — Historical Backtest (expanded)
+30 days | 250 symbols | body 4.0% | v8.30-exp logic
 """
 
 import ccxt
@@ -11,7 +10,7 @@ from datetime import datetime, timezone
 from collections import defaultdict
 
 TIMEFRAME = "15m"
-MIN_BODY_PCT = 4.5
+MIN_BODY_PCT = 4.0
 IMPULSE_STRENGTH = 1.25
 VOLUME_RATIO = 1.7
 PRIOR_VOLUME_MULT = 1.35
@@ -33,10 +32,10 @@ FRESH_ZONE_BARS = 8
 TP1_RR = 1.6
 TP2_RR = 3.0
 
-LOOKBACK_DAYS = 14
-MAX_SYMBOLS = 80
+LOOKBACK_DAYS = 30
+MAX_SYMBOLS = 250
 BARS_LIMIT = 96 * LOOKBACK_DAYS + 80
-SLEEP = 0.12
+SLEEP = 0.10
 
 exchange = ccxt.bybit({
     "enableRateLimit": True,
@@ -49,9 +48,7 @@ def calc_atr(ohlcv, i, period=14):
         return None
     trs = []
     for j in range(i - period + 1, i + 1):
-        high = ohlcv[j][2]
-        low = ohlcv[j][3]
-        prev_close = ohlcv[j - 1][4]
+        high, low, prev_close = ohlcv[j][2], ohlcv[j][3], ohlcv[j - 1][4]
         tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
         trs.append(tr)
     return sum(trs) / len(trs)
@@ -82,17 +79,15 @@ def find_equal_lows(ohlcv, i, atr):
     tolerance = max((atr * EQL_TOLERANCE_ATR) if atr else 0, ref_price * EQL_TOLERANCE_PCT)
     if tolerance <= 0:
         return None
-    best_zone = None
-    best_score = 0
+    best_zone, best_score = None, 0
     for a in range(len(swings)):
         cluster = [swings[a]]
         for b in range(len(swings)):
             if a == b:
                 continue
-            price_ok = abs(swings[b]["price"] - swings[a]["price"]) <= tolerance
-            time_ok = abs(swings[b]["index"] - swings[a]["index"]) <= MAX_CLUSTER_SPAN
-            dist_ok = abs(swings[b]["index"] - swings[a]["index"]) >= MIN_TOUCH_DISTANCE
-            if price_ok and time_ok and dist_ok:
+            if (abs(swings[b]["price"] - swings[a]["price"]) <= tolerance
+                and abs(swings[b]["index"] - swings[a]["index"]) <= MAX_CLUSTER_SPAN
+                and abs(swings[b]["index"] - swings[a]["index"]) >= MIN_TOUCH_DISTANCE):
                 if not any(c["index"] == swings[b]["index"] for c in cluster):
                     cluster.append(swings[b])
         if len(cluster) < 2:
@@ -124,8 +119,7 @@ def find_equal_lows(ohlcv, i, atr):
 def check_at(ohlcv, i):
     if i < 70 or i >= len(ohlcv) - 1:
         return None
-    last = ohlcv[i]
-    prev = ohlcv[i - 1]
+    last, prev = ohlcv[i], ohlcv[i - 1]
     open_p, high_p, low_p, close_p, volume = last[1], last[2], last[3], last[4], last[5]
     body_pct = abs(close_p - open_p) / open_p * 100
     if body_pct < MIN_BODY_PCT:
@@ -152,12 +146,10 @@ def check_at(ohlcv, i):
         return None
     if not (close_p < open_p and close_p < prev[4]):
         return None
-    zone_vol_threshold = zone.get("avg_vol", 0) * 1.15
-    if volume < max(prev[5] * CONDITION_D, zone_vol_threshold):
+    if volume < max(prev[5] * CONDITION_D, zone.get("avg_vol", 0) * 1.15):
         return None
     entry = close_p
-    stop_cand = high_p + (atr * STOP_ATR_MULT if atr else high_p * 0.005)
-    stop = min(stop_cand, entry * (1 + MAX_RISK_PCT))
+    stop = min(high_p + (atr * STOP_ATR_MULT if atr else high_p * 0.005), entry * (1 + MAX_RISK_PCT))
     risk = stop - entry
     if risk <= 0:
         return None
@@ -178,7 +170,7 @@ def outcome(ohlcv, sig):
         high, low = ohlcv[j][2], ohlcv[j][3]
         bars = j - i
         if high >= stop:
-            return ("STOP", bars) if not tp1_hit else ("TP1\u2192STOP", bars)
+            return ("STOP", bars) if not tp1_hit else ("TP1->STOP", bars)
         if low <= tp2:
             return ("TP2", bars) if not tp1_hit else ("TP1+TP2", bars)
         if low <= tp1:
@@ -202,8 +194,8 @@ def top_symbols(n=MAX_SYMBOLS):
 
 def main():
     print("=" * 64)
-    print("RAID Backtest v8.30-exp logic")
-    print(f"Days={LOOKBACK_DAYS} | Symbols\u2264{MAX_SYMBOLS} | Score\u2265{MIN_ZONE_SCORE} | Vol={VOLUME_RATIO}")
+    print("RAID Backtest EXPANDED")
+    print(f"Days={LOOKBACK_DAYS} | Symbols<={MAX_SYMBOLS} | Body>={MIN_BODY_PCT} | Vol={VOLUME_RATIO}")
     print("=" * 64)
 
     symbols = top_symbols()
@@ -212,7 +204,22 @@ def main():
 
     for idx, symbol in enumerate(symbols, 1):
         try:
-            ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=min(BARS_LIMIT, 1000))
+            need = min(BARS_LIMIT, 3000)
+            ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=min(need, 1000))
+            while len(ohlcv) < need:
+                earliest = ohlcv[0][0]
+                chunk = exchange.fetch_ohlcv(
+                    symbol, timeframe=TIMEFRAME, limit=1000,
+                    since=earliest - 1000 * 15 * 60 * 1000
+                )
+                if not chunk:
+                    break
+                chunk = [c for c in chunk if c[0] < earliest]
+                if not chunk:
+                    break
+                ohlcv = chunk + ohlcv
+                time.sleep(SLEEP)
+            ohlcv = ohlcv[-need:]
         except Exception as e:
             print(f"[{idx}/{len(symbols)}] {symbol}: skip ({e})")
             continue
@@ -252,17 +259,17 @@ def main():
         return
 
     wins = stats["TP2"] + stats["TP1+TP2"] + stats["TP1"]
-    losses = stats["STOP"] + stats.get("TP1\u2192STOP", 0)
+    losses = stats["STOP"] + stats["TP1->STOP"]
     print(f"Всего сигналов: {total}")
     print(f"Wins (TP1/TP2):  {wins}  ({wins/total*100:.1f}%)")
     print(f"Losses (STOP):   {losses}  ({losses/total*100:.1f}%)")
     print(f"OPEN:            {stats['OPEN']}")
     print()
-    for r in ["TP2", "TP1+TP2", "TP1", "TP1\u2192STOP", "STOP", "OPEN"]:
+    for r in ["TP2", "TP1+TP2", "TP1", "TP1->STOP", "STOP", "OPEN"]:
         if stats[r]:
             print(f"  {r:12}: {stats[r]}")
 
-    print("\n--- Детальный список (скопируй мне) ---")
+    print("\n--- Детальный список ---")
     for s in all_signals:
         print(f"{s['time']} | {s['symbol']:12} | sc={s['score']} t={s['touches']} body={s['body']:5.1f}% | {s['result']:10} | {s['bars']} bars")
 
