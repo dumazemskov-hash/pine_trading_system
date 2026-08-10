@@ -5,25 +5,27 @@ import json
 import os
 from datetime import datetime, timezone
 
-# === DUMP-after-PUMP Scanner v0.1 ===
+# === DUMP-after-PUMP Scanner v0.2_strict ===
+# BT 60d: +31.6% | Avg +0.25R | MaxDD 16.8% | 62 sig
 TELEGRAM_TOKEN = "8821282524:AAG7OKFKdzks0qy2WdqBi4gU2dV62Isp90k"
 CHAT_ID = "401292001"
 
 TIMEFRAME = "15m"
-MIN_BODY_PCT = 4.0
+MIN_BODY_PCT = 5.0
 MAX_BODY_PCT = 9.0
 PUMP_LOOKBACK = 6
-PUMP_MIN_BODY = 5.0
+PUMP_MIN_BODY = 8.0
 CLOSE_IN_RANGE_MAX = 0.35
 MIN_BODY_TO_RANGE = 0.50
-VOLUME_RATIO = 1.7
+VOLUME_RATIO = 2.5
 COOLDOWN_BARS = 32
-MAX_RISK_PCT = 0.04
+MAX_RISK_PCT = 0.02
 STOP_ATR_MULT = 0.35
 SWEEP_LOOKBACK = 10
 TP1_RR = 1.6
 TP2_RR = 3.0
 CANDLES_TO_LOG = 40
+VERSION = "dump-v0.2"
 
 exchange = ccxt.bybit({
     "enableRateLimit": True,
@@ -54,7 +56,7 @@ def log_signal(signal, ohlcv, atr):
     } for c in ohlcv[-CANDLES_TO_LOG:]]
     record = {
         "logged_at": datetime.now(timezone.utc).isoformat(),
-        "version": "dump-v0.1",
+        "version": VERSION,
         "symbol": signal["symbol"],
         "entry": signal["entry"], "stop": signal["stop"],
         "tp1": signal["tp1"], "tp2": signal["tp2"],
@@ -90,8 +92,7 @@ def calc_atr(ohlcv, period=14):
 
 
 def had_pump(ohlcv):
-    n = len(ohlcv)
-    if n < PUMP_LOOKBACK + 2:
+    if len(ohlcv) < PUMP_LOOKBACK + 2:
         return False
     for j in range(-PUMP_LOOKBACK - 1, -1):
         o, c = ohlcv[j][1], ohlcv[j][4]
@@ -147,8 +148,8 @@ def check_signal(symbol, ohlcv_raw):
 
 
 def main():
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] === DUMP Scanner v0.1 ===")
-    print(f"pump>={PUMP_MIN_BODY}% / {PUMP_LOOKBACK} bars | dump body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | risk {MAX_RISK_PCT*100:.0f}%")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] === DUMP Scanner v0.2_strict ===")
+    print(f"pump>={PUMP_MIN_BODY}%/{PUMP_LOOKBACK}b | body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | vol>={VOLUME_RATIO}x | risk {MAX_RISK_PCT*100:.0f}%")
     symbols = get_symbols()
     while True:
         for symbol in symbols:
@@ -169,13 +170,13 @@ def main():
                 log_signal(signal, signal["ohlcv_closed"], signal.get("atr"))
                 rp = signal["risk"] / signal["entry"] * 100
                 msg = (
-                    f"DUMP v0.1 | {symbol}\n"
+                    f"DUMP v0.2 | {symbol}\n"
                     f"Entry: {signal['entry']:.6f}\n"
                     f"Stop:  {signal['stop']:.6f}\n"
                     f"TP1:   {signal['tp1']:.6f} | TP2: {signal['tp2']:.6f}\n"
                     f"Risk:  {rp:.2f}%\n"
                     f"Body:  {signal['body_pct']:.2f}%\n"
-                    f"Mode:  dump-after-pump"
+                    f"Mode:  dump-after-pump strict"
                 )
                 send_telegram(msg)
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] DUMP → {symbol} | body={signal['body_pct']:.1f}%")
