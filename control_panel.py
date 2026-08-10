@@ -107,8 +107,19 @@ class ControlPanel(tk.Tk):
             font=("Consolas", 9),
             relief="flat",
             borderwidth=0,
+            undo=False,
         )
         self.log_box.pack(fill="both", expand=True, padx=16, pady=(4, 12))
+        self.log_box.bind("<Control-c>", self._copy_log)
+        self.log_box.bind("<Control-C>", self._copy_log)
+        self.log_box.bind("<Control-a>", self._select_all_log)
+        self.log_box.bind("<Control-A>", self._select_all_log)
+        self._log_menu = tk.Menu(self.log_box, tearoff=0)
+        self._log_menu.add_command(label="Копировать", command=self._copy_log_menu)
+        self._log_menu.add_command(label="Выделить всё", command=self._select_all_log_menu)
+        self._log_menu.add_separator()
+        self._log_menu.add_command(label="Копировать весь лог", command=self._copy_all_log)
+        self.log_box.bind("<Button-3>", self._show_log_menu)
 
     def _log(self, msg: str):
         ts = datetime.now().strftime("%H:%M:%S")
@@ -176,6 +187,41 @@ class ControlPanel(tk.Tk):
         except Exception as e:
             self._log(f"EXC: {e}")
             return False
+
+    def _copy_log(self, event=None):
+        try:
+            text = self.log_box.get("sel.first", "sel.last")
+        except tk.TclError:
+            return "break"
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        self.update()
+        return "break"
+
+    def _select_all_log(self, event=None):
+        self.log_box.tag_add("sel", "1.0", "end-1c")
+        self.log_box.mark_set("insert", "1.0")
+        self.log_box.see("insert")
+        return "break"
+
+    def _copy_log_menu(self):
+        self._copy_log()
+
+    def _select_all_log_menu(self):
+        self._select_all_log()
+
+    def _copy_all_log(self):
+        text = self.log_box.get("1.0", "end-1c")
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        self.update()
+        self._log("Лог скопирован в буфер")
+
+    def _show_log_menu(self, event):
+        try:
+            self._log_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self._log_menu.grab_release()
 
     def cmd_git_pull(self):
         def job():
