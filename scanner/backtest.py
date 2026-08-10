@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-RAID Hunter — Historical Backtest (expanded)
-30 days | 250 symbols | body 4.0% | v8.30-exp logic
+RAID Hunter — Historical Backtest v8.31
+Фильтры: body 4-9%, prev_pump<=3%, cooldown 12
+30 days | 250 symbols
 """
 
 import ccxt
@@ -11,6 +12,9 @@ from collections import defaultdict
 
 TIMEFRAME = "15m"
 MIN_BODY_PCT = 4.0
+MAX_BODY_PCT = 9.0
+MAX_PREV_BODY_PCT = 3.0
+COOLDOWN_BARS = 12
 IMPULSE_STRENGTH = 1.25
 VOLUME_RATIO = 1.7
 PRIOR_VOLUME_MULT = 1.35
@@ -86,8 +90,8 @@ def find_equal_lows(ohlcv, i, atr):
             if a == b:
                 continue
             if (abs(swings[b]["price"] - swings[a]["price"]) <= tolerance
-                and abs(swings[b]["index"] - swings[a]["index"]) <= MAX_CLUSTER_SPAN
-                and abs(swings[b]["index"] - swings[a]["index"]) >= MIN_TOUCH_DISTANCE):
+                    and abs(swings[b]["index"] - swings[a]["index"]) <= MAX_CLUSTER_SPAN
+                    and abs(swings[b]["index"] - swings[a]["index"]) >= MIN_TOUCH_DISTANCE):
                 if not any(c["index"] == swings[b]["index"] for c in cluster):
                     cluster.append(swings[b])
         if len(cluster) < 2:
@@ -121,38 +125,53 @@ def check_at(ohlcv, i):
         return None
     last, prev = ohlcv[i], ohlcv[i - 1]
     open_p, high_p, low_p, close_p, volume = last[1], last[2], last[3], last[4], last[5]
+
     body_pct = abs(close_p - open_p) / open_p * 100
-    if body_pct < MIN_BODY_PCT:
+    if body_pct < MIN_BODY_PCT or body_pct > MAX_BODY_PCT:
         return None
+
+    prev_body = (prev[4] - prev[1]) / prev[1] * 100 if prev[1] else 0
+    if prev_body > MAX_PREV_BODY_PCT:
+        return None
+
     impulse = (high_p - low_p) / low_p * 100 if low_p > 0 else 0
     if impulse < MIN_BODY_PCT * IMPULSE_STRENGTH:
         return None
+
     vol_ma = sum(c[5] for c in ohlcv[i - 20:i]) / 20
     if volume < vol_ma * VOLUME_RATIO:
         return None
+
     vol_recent = sum(c[5] for c in ohlcv[i - 20:i]) / 20
     vol_older = sum(c[5] for c in ohlcv[max(0, i - 60):i - 20]) / max(1, min(40, i - 20))
     if vol_older <= 0 or vol_recent < vol_older * PRIOR_VOLUME_MULT:
         return None
+
     atr = calc_atr(ohlcv, i)
     zone = find_equal_lows(ohlcv, i, atr)
     if zone is None:
         return None
+
     break_level = zone["zone_low"] - (atr * BREAK_ATR_MULT if atr else zone["zone_low"] * 0.003)
     if low_p >= break_level:
         return None
+
     recent_lows = [c[3] for c in ohlcv[i - SWEEP_LOOKBACK + 1:i + 1]]
     if low_p > min(recent_lows):
         return None
+
     if not (close_p < open_p and close_p < prev[4]):
         return None
+
     if volume < max(prev[5] * CONDITION_D, zone.get("avg_vol", 0) * 1.15):
         return None
+
     entry = close_p
     stop = min(high_p + (atr * STOP_ATR_MULT if atr else high_p * 0.005), entry * (1 + MAX_RISK_PCT))
     risk = stop - entry
     if risk <= 0:
         return None
+
     return {
         "ts": last[0], "entry": entry, "stop": stop,
         "tp1": entry - risk * TP1_RR, "tp2": entry - risk * TP2_RR,
@@ -192,10 +211,31 @@ def top_symbols(n=MAX_SYMBOLS):
     return symbols
 
 
+def fetch_ohlcv_full(symbol, need):
+    ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=min(need, 1000))
+    while len(ohlcv) < need:
+        earliest = ohlcv[0][0]
+        chunk = exchange.fetch_ohlcv(
+            symbol, timeframe=TIMEFRAME, limit=1000,
+            since=earliest - 1000 * 15 * 60 * 1000,
+        )
+        if not chunk:
+            break
+        chunk = [c for c in chunk if c[0] < earliest]
+        if not chunk:
+            break
+        ohlcv = chunk + ohlcv
+        time.sleep(SLEEP)
+    return ohlcv[-need:]
+
+
 def main():
     print("=" * 64)
-    print("RAID Backtest EXPANDED")
-    print(f"Days={LOOKBACK_DAYS} | Symbols<={MAX_SYMBOLS} | Body>={MIN_BODY_PCT} | Vol={VOLUME_RATIO}")
+    print("RAID Backtest v8.31")
+    print(
+        f"Days={LOOKBACK_DAYS} | Sym<={MAX_SYMBOLS} | "
+        f"Body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS}"
+    )
     print("=" * 64)
 
     symbols = top_symbols()
@@ -204,22 +244,7 @@ def main():
 
     for idx, symbol in enumerate(symbols, 1):
         try:
-            need = min(BARS_LIMIT, 3000)
-            ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=min(need, 1000))
-            while len(ohlcv) < need:
-                earliest = ohlcv[0][0]
-                chunk = exchange.fetch_ohlcv(
-                    symbol, timeframe=TIMEFRAME, limit=1000,
-                    since=earliest - 1000 * 15 * 60 * 1000
-                )
-                if not chunk:
-                    break
-                chunk = [c for c in chunk if c[0] < earliest]
-                if not chunk:
-                    break
-                ohlcv = chunk + ohlcv
-                time.sleep(SLEEP)
-            ohlcv = ohlcv[-need:]
+            ohlcv = fetch_ohlcv_full(symbol, min(BARS_LIMIT, 3000))
         except Exception as e:
             print(f"[{idx}/{len(symbols)}] {symbol}: skip ({e})")
             continue
@@ -228,12 +253,16 @@ def main():
             continue
 
         found = 0
+        last_sig_i = -999
         for i in range(70, len(ohlcv) - 8):
+            if i - last_sig_i < COOLDOWN_BARS:
+                continue
             sig = check_at(ohlcv, i)
             if sig is None:
                 continue
             res, bars = outcome(ohlcv, sig)
             found += 1
+            last_sig_i = i
             stats[res] += 1
             stats["TOTAL"] += 1
             stats[f"score_{sig['zone_score']}"] += 1
@@ -271,7 +300,10 @@ def main():
 
     print("\n--- Детальный список ---")
     for s in all_signals:
-        print(f"{s['time']} | {s['symbol']:12} | sc={s['score']} t={s['touches']} body={s['body']:5.1f}% | {s['result']:10} | {s['bars']} bars")
+        print(
+            f"{s['time']} | {s['symbol']:12} | sc={s['score']} t={s['touches']} "
+            f"body={s['body']:5.1f}% | {s['result']:10} | {s['bars']} bars"
+        )
 
     print("=" * 64)
     print("Готово. Скопируй SUMMARY + список и пришли.")
