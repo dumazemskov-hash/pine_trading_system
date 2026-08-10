@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 RAID Hunter — Control Panel
-Минималистичная панель управления сканером и служебными командами.
 """
 
 import os
@@ -18,7 +17,7 @@ from tkinter import ttk, scrolledtext, messagebox
 ROOT = Path(__file__).resolve().parent
 SCANNER_DIR = ROOT / "scanner"
 SIGNALS_DIR = ROOT / "signals"
-SCANNER_SCRIPT = SCANNER_DIR / "v8.33-exp.py"
+SCANNER_SCRIPT = SCANNER_DIR / "v8.32-exp.py"
 CHECK_SCRIPT = SCANNER_DIR / "check_signals.py"
 BACKTEST_SCRIPT = SCANNER_DIR / "backtest.py"
 BACKTESTS_DIR = ROOT / "backtests"
@@ -31,13 +30,11 @@ def find_git() -> str:
     g = shutil.which("git")
     if g:
         return g
-    candidates = [
+    for c in [
         r"C:\Program Files\Git\cmd\git.exe",
         r"C:\Program Files\Git\bin\git.exe",
         r"C:\Program Files (x86)\Git\cmd\git.exe",
-        r"C:\Program Files (x86)\Git\bin\git.exe",
-    ]
-    for c in candidates:
+    ]:
         if Path(c).exists():
             return c
     return "git"
@@ -50,10 +47,8 @@ class ControlPanel(tk.Tk):
         self.geometry("860x580")
         self.minsize(640, 480)
         self.configure(bg="#1e1e1e")
-
         self.scanner_proc = None
         self.log_queue = queue.Queue()
-
         self._build_ui()
         self.after(100, self._poll_log)
         self._log(f"Панель запущена | {ROOT}")
@@ -68,15 +63,12 @@ class ControlPanel(tk.Tk):
         style.configure("Header.TLabel", font=("Segoe UI", 14, "bold"), foreground="#7dd3fc")
         style.configure("Status.TLabel", font=("Segoe UI", 9), foreground="#aaa")
 
-        header = ttk.Label(self, text="RAID Hunter Control", style="Header.TLabel")
-        header.pack(pady=(12, 4))
-
+        ttk.Label(self, text="RAID Hunter Control", style="Header.TLabel").pack(pady=(12, 4))
         self.status_var = tk.StringVar(value="Сканер: остановлен")
         ttk.Label(self, textvariable=self.status_var, style="Status.TLabel").pack()
 
         btn_frame = ttk.Frame(self)
         btn_frame.pack(pady=12, padx=16, fill="x")
-
         buttons = [
             ("Git Pull", self.cmd_git_pull),
             ("Запустить сканер", self.cmd_start_scanner),
@@ -89,25 +81,16 @@ class ControlPanel(tk.Tk):
             ("Открыть signals", self.cmd_open_signals),
             ("Обновить статус", self.cmd_refresh_status),
         ]
-
         for i, (text, cmd) in enumerate(buttons):
-            b = ttk.Button(btn_frame, text=text, command=cmd)
-            b.grid(row=i // 4, column=i % 4, padx=6, pady=6, sticky="ew")
+            ttk.Button(btn_frame, text=text, command=cmd).grid(
+                row=i // 4, column=i % 4, padx=6, pady=6, sticky="ew"
+            )
             btn_frame.columnconfigure(i % 4, weight=1)
 
-        log_label = ttk.Label(self, text="Лог", style="Status.TLabel")
-        log_label.pack(anchor="w", padx=16)
-
+        ttk.Label(self, text="Лог", style="Status.TLabel").pack(anchor="w", padx=16)
         self.log_box = scrolledtext.ScrolledText(
-            self,
-            height=18,
-            bg="#121212",
-            fg="#d4d4d4",
-            insertbackground="#fff",
-            font=("Consolas", 9),
-            relief="flat",
-            borderwidth=0,
-            undo=False,
+            self, height=18, bg="#121212", fg="#d4d4d4",
+            insertbackground="#fff", font=("Consolas", 9), relief="flat", borderwidth=0,
         )
         self.log_box.pack(fill="both", expand=True, padx=16, pady=(4, 12))
         self.log_box.bind("<Control-c>", self._copy_log)
@@ -115,15 +98,14 @@ class ControlPanel(tk.Tk):
         self.log_box.bind("<Control-a>", self._select_all_log)
         self.log_box.bind("<Control-A>", self._select_all_log)
         self._log_menu = tk.Menu(self.log_box, tearoff=0)
-        self._log_menu.add_command(label="Копировать", command=self._copy_log_menu)
-        self._log_menu.add_command(label="Выделить всё", command=self._select_all_log_menu)
+        self._log_menu.add_command(label="Копировать", command=lambda: self._copy_log())
+        self._log_menu.add_command(label="Выделить всё", command=lambda: self._select_all_log())
         self._log_menu.add_separator()
         self._log_menu.add_command(label="Копировать весь лог", command=self._copy_all_log)
         self.log_box.bind("<Button-3>", self._show_log_menu)
 
     def _log(self, msg: str):
-        ts = datetime.now().strftime("%H:%M:%S")
-        self.log_queue.put(f"[{ts}] {msg}")
+        self.log_queue.put(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
     def _poll_log(self):
         try:
@@ -140,30 +122,21 @@ class ControlPanel(tk.Tk):
 
     def _env(self):
         env = os.environ.copy()
-        extra = [
-            r"C:\Program Files\Git\cmd",
-            r"C:\Program Files\Git\bin",
-            r"C:\Program Files (x86)\Git\cmd",
-        ]
-        env["PATH"] = os.pathsep.join(extra + [env.get("PATH", "")])
+        env["PATH"] = os.pathsep.join([
+            r"C:\Program Files\Git\cmd", r"C:\Program Files\Git\bin", env.get("PATH", "")
+        ])
         env["PYTHONIOENCODING"] = "utf-8"
         return env
 
     def _run_cmd(self, args, cwd=None):
         cwd = cwd or str(ROOT)
-        if isinstance(args, list) and args and args[0] == "git":
+        if args and args[0] == "git":
             args = [find_git()] + list(args[1:])
         self._log("$ " + " ".join(str(a) for a in args))
         try:
             p = subprocess.run(
-                args,
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=120,
-                env=self._env(),
+                args, cwd=cwd, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=120, env=self._env(),
             )
             out = (p.stdout or "").strip()
             err = (p.stderr or "").strip()
@@ -173,17 +146,8 @@ class ControlPanel(tk.Tk):
             if err and p.returncode != 0:
                 for line in err.splitlines()[-20:]:
                     self._log("ERR: " + line)
-            if p.returncode == 0:
-                self._log("OK")
-            else:
-                self._log(f"exit code {p.returncode}")
+            self._log("OK" if p.returncode == 0 else f"exit code {p.returncode}")
             return p.returncode == 0
-        except FileNotFoundError as e:
-            self._log(f"Файл не найден: {e}")
-            return False
-        except subprocess.TimeoutExpired:
-            self._log("TIMEOUT")
-            return False
         except Exception as e:
             self._log(f"EXC: {e}")
             return False
@@ -200,20 +164,11 @@ class ControlPanel(tk.Tk):
 
     def _select_all_log(self, event=None):
         self.log_box.tag_add("sel", "1.0", "end-1c")
-        self.log_box.mark_set("insert", "1.0")
-        self.log_box.see("insert")
         return "break"
 
-    def _copy_log_menu(self):
-        self._copy_log()
-
-    def _select_all_log_menu(self):
-        self._select_all_log()
-
     def _copy_all_log(self):
-        text = self.log_box.get("1.0", "end-1c")
         self.clipboard_clear()
-        self.clipboard_append(text)
+        self.clipboard_append(self.log_box.get("1.0", "end-1c"))
         self.update()
         self._log("Лог скопирован в буфер")
 
@@ -224,52 +179,35 @@ class ControlPanel(tk.Tk):
             self._log_menu.grab_release()
 
     def cmd_git_pull(self):
-        def job():
-            self._log("--- git pull ---")
-            self._run_cmd(["git", "pull"], cwd=str(ROOT))
-        self._run_async(job)
+        self._run_async(lambda: (self._log("--- git pull ---"), self._run_cmd(["git", "pull"])))
 
     def cmd_start_scanner(self):
         if self.scanner_proc and self.scanner_proc.poll() is None:
-            self._log("Сканер уже запущен")
-            return
+            self._log("Сканер уже запущен"); return
         if not SCANNER_SCRIPT.exists():
-            self._log(f"Не найден: {SCANNER_SCRIPT}")
-            messagebox.showerror("Ошибка", f"Нет файла:\n{SCANNER_SCRIPT}")
-            return
+            messagebox.showerror("Ошибка", f"Нет файла:\n{SCANNER_SCRIPT}"); return
 
         def job():
             self._log(f"--- старт {SCANNER_SCRIPT.name} ---")
             try:
                 self.scanner_proc = subprocess.Popen(
                     [sys.executable, "-u", str(SCANNER_SCRIPT)],
-                    cwd=str(SCANNER_DIR),
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    bufsize=1,
-                    env=self._env(),
+                    cwd=str(SCANNER_DIR), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace", bufsize=1, env=self._env(),
                 )
                 self.status_var.set(f"Сканер: РАБОТАЕТ ({SCANNER_SCRIPT.name})")
-                self._log("Процесс запущен")
-                assert self.scanner_proc.stdout is not None
                 for line in self.scanner_proc.stdout:
-                    line = line.rstrip()
-                    if line:
-                        self._log(line)
+                    if line.rstrip():
+                        self._log(line.rstrip())
                 self.status_var.set("Сканер: остановлен")
                 self._log("Сканер завершился")
             except Exception as e:
                 self._log(f"Не удалось запустить: {e}")
                 self.status_var.set("Сканер: ошибка")
-
         self._run_async(job)
 
     def cmd_stop_scanner(self):
         if self.scanner_proc and self.scanner_proc.poll() is None:
-            self._log("Останавливаю сканер...")
             self.scanner_proc.terminate()
             try:
                 self.scanner_proc.wait(timeout=5)
@@ -284,8 +222,7 @@ class ControlPanel(tk.Tk):
         def job():
             self._log("--- check_signals ---")
             if not CHECK_SCRIPT.exists():
-                self._log("check_signals.py не найден в scanner/")
-                return
+                self._log("check_signals.py не найден"); return
             self._run_cmd([sys.executable, "-u", str(CHECK_SCRIPT)], cwd=str(SCANNER_DIR))
         self._run_async(job)
 
@@ -293,107 +230,69 @@ class ControlPanel(tk.Tk):
         def job():
             self._log("--- backtest ---")
             if not BACKTEST_SCRIPT.exists():
-                self._log(f"Не найден: {BACKTEST_SCRIPT}")
-                return
-            self._log("Запуск backtest.py (30 дней, ~250 монет) — это займёт несколько минут...")
-            cwd = str(SCANNER_DIR)
-            args = [sys.executable, "-u", str(BACKTEST_SCRIPT)]
-            self._log("$ " + " ".join(str(a) for a in args))
+                self._log(f"Не найден: {BACKTEST_SCRIPT}"); return
+            self._log("Запуск backtest.py...")
             try:
                 p = subprocess.Popen(
-                    args,
-                    cwd=cwd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    bufsize=1,
-                    env=self._env(),
+                    [sys.executable, "-u", str(BACKTEST_SCRIPT)],
+                    cwd=str(SCANNER_DIR), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace", bufsize=1, env=self._env(),
                 )
-                assert p.stdout is not None
                 for line in p.stdout:
-                    line = line.rstrip()
-                    if line:
-                        self._log(line)
+                    if line.rstrip():
+                        self._log(line.rstrip())
                 code = p.wait(timeout=1)
+                self._log("Бэктест завершён OK" if code == 0 else f"exit {code}")
                 if code == 0:
-                    self._log("Бэктест завершён OK")
                     self._log("Результат: backtests/latest.txt — жми Push all")
-                else:
-                    self._log(f"Бэктест exit code {code}")
             except Exception as e:
                 self._log(f"Ошибка бэктеста: {e}")
         self._run_async(job)
 
     def cmd_show_backtest(self):
         def job():
-            self._log("--- последний бэктест ---")
             latest = BACKTESTS_DIR / "latest.txt"
             if not latest.exists():
-                self._log("Нет backtests/latest.txt — сначала запусти Бэктест")
-                return
-            try:
-                text = latest.read_text(encoding="utf-8")
-                for line in text.splitlines():
-                    self._log(line)
-                self._log(f"(файл: {latest})")
-            except Exception as e:
-                self._log(f"Не прочиталось: {e}")
+                self._log("Нет backtests/latest.txt"); return
+            for line in latest.read_text(encoding="utf-8").splitlines():
+                self._log(line)
+            self._log(f"(файл: {latest})")
         self._run_async(job)
 
     def cmd_push_signals(self):
         def job():
             self._log("--- push signals ---")
             SIGNALS_DIR.mkdir(exist_ok=True)
-            gitkeep = SIGNALS_DIR / ".gitkeep"
-            if not any(SIGNALS_DIR.glob("*.jsonl")) and not gitkeep.exists():
-                gitkeep.write_text("")
-            if not self._run_cmd(["git", "add", "signals"], cwd=str(ROOT)):
-                self._log("git add не удался")
-                return
+            self._run_cmd(["git", "add", "signals"])
             r = subprocess.run(
                 [find_git(), "status", "--porcelain", "signals"],
-                cwd=str(ROOT),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                env=self._env(),
+                cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", env=self._env(),
             )
             if not (r.stdout or "").strip():
-                self._log("Нет новых логов для пуша")
-                return
-            msg = f"signals {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-            self._run_cmd(["git", "commit", "-m", msg], cwd=str(ROOT))
-            self._run_cmd(["git", "push"], cwd=str(ROOT))
+                self._log("Нет новых логов"); return
+            self._run_cmd(["git", "commit", "-m", f"signals {datetime.now().strftime('%Y-%m-%d %H:%M')}"])
+            self._run_cmd(["git", "push"])
         self._run_async(job)
 
     def cmd_push_all(self):
         def job():
             self._log("--- push all ---")
             BACKTESTS_DIR.mkdir(exist_ok=True)
-            self._run_cmd(["git", "add", "-A"], cwd=str(ROOT))
-            self._run_cmd(["git", "add", "-f", "--", "backtests"], cwd=str(ROOT))
+            self._run_cmd(["git", "add", "-A"])
+            self._run_cmd(["git", "add", "-f", "--", "backtests"])
             r = subprocess.run(
                 [find_git(), "status", "--porcelain"],
-                cwd=str(ROOT),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                env=self._env(),
+                cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", env=self._env(),
             )
             dirty = (r.stdout or "").strip()
             if dirty:
                 for line in dirty.splitlines()[:30]:
                     self._log("  " + line)
-                msg = f"update {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-                self._run_cmd(["git", "commit", "-m", msg], cwd=str(ROOT))
+                self._run_cmd(["git", "commit", "-m", f"update {datetime.now().strftime('%Y-%m-%d %H:%M')}"])
             else:
                 self._log("Рабочее дерево чистое")
-            self._run_cmd(["git", "push"], cwd=str(ROOT))
-            self._run_cmd(["git", "status", "-sb"], cwd=str(ROOT))
+            self._run_cmd(["git", "push"])
+            self._run_cmd(["git", "status", "-sb"])
         self._run_async(job)
 
     def cmd_open_signals(self):
@@ -403,8 +302,6 @@ class ControlPanel(tk.Tk):
         try:
             if sys.platform.startswith("win"):
                 os.startfile(path)
-            elif sys.platform == "darwin":
-                subprocess.run(["open", path])
             else:
                 subprocess.run(["xdg-open", path])
         except Exception as e:
@@ -415,21 +312,7 @@ class ControlPanel(tk.Tk):
         self.status_var.set(
             f"Сканер: {'РАБОТАЕТ' if running else 'остановлен'} | {SCANNER_SCRIPT.name}"
         )
-        if SIGNALS_DIR.exists():
-            files = sorted(SIGNALS_DIR.glob("*.jsonl"))
-            if files:
-                last = files[-1]
-                try:
-                    lines = [ln for ln in last.read_text(encoding="utf-8").splitlines() if ln.strip()]
-                    self._log(f"Лог {last.name}: {len(lines)} записей")
-                except Exception:
-                    self._log(f"Последний лог: {last.name}")
-            else:
-                self._log("Сигналов в signals/ пока нет")
-        else:
-            self._log("Папка signals/ ещё не создана")
 
 
 if __name__ == "__main__":
-    app = ControlPanel()
-    app.mainloop()
+    ControlPanel().mainloop()
