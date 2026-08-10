@@ -21,6 +21,7 @@ SIGNALS_DIR = ROOT / "signals"
 SCANNER_SCRIPT = SCANNER_DIR / "v8.31-exp.py"
 CHECK_SCRIPT = SCANNER_DIR / "check_signals.py"
 BACKTEST_SCRIPT = SCANNER_DIR / "backtest.py"
+BACKTESTS_DIR = ROOT / "backtests"
 
 if not SCANNER_SCRIPT.exists():
     SCANNER_SCRIPT = SCANNER_DIR / "scanner.py"
@@ -82,6 +83,7 @@ class ControlPanel(tk.Tk):
             ("Остановить сканер", self.cmd_stop_scanner),
             ("Проверить сигналы", self.cmd_check_signals),
             ("Бэктест", self.cmd_backtest),
+            ("Последний BT", self.cmd_show_backtest),
             ("Push логов", self.cmd_push_signals),
             ("Push all", self.cmd_push_all),
             ("Открыть signals", self.cmd_open_signals),
@@ -271,10 +273,27 @@ class ControlPanel(tk.Tk):
                 code = p.wait(timeout=1)
                 if code == 0:
                     self._log("Бэктест завершён OK")
+                    self._log("Результат: backtests/latest.txt — жми Push all")
                 else:
                     self._log(f"Бэктест exit code {code}")
             except Exception as e:
                 self._log(f"Ошибка бэктеста: {e}")
+        self._run_async(job)
+
+    def cmd_show_backtest(self):
+        def job():
+            self._log("--- последний бэктест ---")
+            latest = BACKTESTS_DIR / "latest.txt"
+            if not latest.exists():
+                self._log("Нет backtests/latest.txt — сначала запусти Бэктест")
+                return
+            try:
+                text = latest.read_text(encoding="utf-8")
+                for line in text.splitlines():
+                    self._log(line)
+                self._log(f"(файл: {latest})")
+            except Exception as e:
+                self._log(f"Не прочиталось: {e}")
         self._run_async(job)
 
     def cmd_push_signals(self):
