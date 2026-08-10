@@ -2,8 +2,7 @@
 """
 RAID Hunter — Historical Backtest v8.31
 Фильтры: body 4-9%, prev_pump<=3%, cooldown 12
-30 days | 250 symbols
-Отчёт → backtests/latest.txt + backtests/bt_YYYY-MM-DD_HHMM.txt
+Equity: $300 start, 2% risk, BE after TP1
 """
 
 import ccxt
@@ -37,6 +36,10 @@ FRESH_ZONE_BARS = 8
 
 TP1_RR = 1.6
 TP2_RR = 3.0
+
+START_CAPITAL = 300.0
+RISK_PER_TRADE = 0.02
+BE_AFTER_TP1 = True
 
 LOOKBACK_DAYS = 30
 MAX_SYMBOLS = 250
@@ -184,21 +187,30 @@ def check_at(ohlcv, i):
 
 
 def outcome(ohlcv, sig):
+    """(result, bars, r_multiple). После TP1 стоп → BE."""
     i = sig["bar_index"]
+    entry = sig["entry"]
     stop, tp1, tp2 = sig["stop"], sig["tp1"], sig["tp2"]
     tp1_hit = False
     for j in range(i + 1, len(ohlcv)):
         high, low = ohlcv[j][2], ohlcv[j][3]
         bars = j - i
-        if high >= stop:
-            return ("STOP", bars) if not tp1_hit else ("TP1->STOP", bars)
+        eff_stop = entry if (tp1_hit and BE_AFTER_TP1) else stop
+        if high >= eff_stop:
+            if tp1_hit and BE_AFTER_TP1:
+                return ("TP1->BE", bars, TP1_RR * 0.5)  # half closed at TP1, rest BE
+            if tp1_hit:
+                return ("TP1->STOP", bars, TP1_RR * 0.5 - 0.5)
+            return ("STOP", bars, -1.0)
         if low <= tp2:
-            return ("TP2", bars) if not tp1_hit else ("TP1+TP2", bars)
+            if tp1_hit:
+                return ("TP1+TP2", bars, (TP1_RR + TP2_RR) / 2)
+            return ("TP2", bars, TP2_RR)
         if low <= tp1:
             tp1_hit = True
     if tp1_hit:
-        return ("TP1", len(ohlcv) - i - 1)
-    return ("OPEN", len(ohlcv) - i - 1)
+        return ("TP1", len(ohlcv) - i - 1, TP1_RR)
+    return ("OPEN", len(ohlcv) - i - 1, 0.0)
 
 
 def top_symbols(n=MAX_SYMBOLS):
@@ -240,7 +252,7 @@ def _save_report(lines):
     latest = out_dir / "latest.txt"
     header = [
         f"RAID Backtest report | {stamp} UTC",
-        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS}",
+        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS} | BE after TP1 | $300 start",
         f"Days={LOOKBACK_DAYS} | Symbols<={MAX_SYMBOLS}",
         "",
     ]
@@ -252,11 +264,12 @@ def _save_report(lines):
 
 def main():
     print("=" * 64)
-    print("RAID Backtest v8.31")
+    print("RAID Backtest v8.31 + Equity")
     print(
         f"Days={LOOKBACK_DAYS} | Sym<={MAX_SYMBOLS} | "
         f"Body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS}"
     )
+    print(f"Capital=${START_CAPITAL:.0f} | Risk={RISK_PER_TRADE*100:.0f}% | BE after TP1={BE_AFTER_TP1}")
     print("=" * 64)
 
     symbols = top_symbols()
@@ -281,21 +294,22 @@ def main():
             sig = check_at(ohlcv, i)
             if sig is None:
                 continue
-            res, bars = outcome(ohlcv, sig)
+            res, bars, r_mult = outcome(ohlcv, sig)
             found += 1
             last_sig_i = i
             stats[res] += 1
             stats["TOTAL"] += 1
             stats[f"score_{sig['zone_score']}"] += 1
+            stats["sum_R"] += r_mult
 
             ts = datetime.fromtimestamp(sig["ts"] / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
             name = symbol.split("/")[0]
             all_signals.append({
                 "time": ts, "symbol": name, "score": sig["zone_score"],
                 "touches": sig["zone_touches"], "body": round(sig["body_pct"], 2),
-                "result": res, "bars": bars,
+                "result": res, "bars": bars, "r": r_mult,
             })
-            print(f"  {ts} | {name:12} | score={sig['zone_score']} | {res:10} | bars={bars}")
+            print(f"  {ts} | {name:12} | score={sig['zone_score']} | {res:10} | bars={bars} | {r_mult:+.1f}R")
 
         print(f"[{idx}/{len(symbols)}] {symbol.split('/')[0]}: {found} signals")
         time.sleep(SLEEP)
@@ -318,21 +332,48 @@ def main():
 
     wins = stats["TP2"] + stats["TP1+TP2"] + stats["TP1"]
     losses = stats["STOP"] + stats["TP1->STOP"]
+    be = stats["TP1->BE"]
     emit(f"Всего сигналов: {total}")
     emit(f"Wins (TP1/TP2):  {wins}  ({wins/total*100:.1f}%)")
+    emit(f"BE after TP1:    {be}")
     emit(f"Losses (STOP):   {losses}  ({losses/total*100:.1f}%)")
     emit(f"OPEN:            {stats['OPEN']}")
     emit("")
-    for r in ["TP2", "TP1+TP2", "TP1", "TP1->STOP", "STOP", "OPEN"]:
+    for r in ["TP2", "TP1+TP2", "TP1", "TP1->BE", "TP1->STOP", "STOP", "OPEN"]:
         if stats[r]:
             emit(f"  {r:12}: {stats[r]}")
+
+    capital = START_CAPITAL
+    peak = capital
+    max_dd = 0.0
+    emit("")
+    emit("--- Equity ($300 start, 2% risk, BE after TP1) ---")
+    emit(f"{'time':16} {'sym':12} {'result':10} {'R':>6} {'risk$':>8} {'pnl$':>8} {'equity':>10}")
+    for s in all_signals:
+        risk_usd = capital * RISK_PER_TRADE
+        pnl = risk_usd * s["r"]
+        capital += pnl
+        peak = max(peak, capital)
+        dd = (peak - capital) / peak * 100 if peak > 0 else 0
+        max_dd = max(max_dd, dd)
+        emit(
+            f"{s['time']:16} {s['symbol']:12} {s['result']:10} {s['r']:+5.1f}R "
+            f"{risk_usd:8.2f} {pnl:+8.2f} {capital:10.2f}"
+        )
+    total_r = stats["sum_R"]
+    emit("")
+    emit(f"Start:     ${START_CAPITAL:.2f}")
+    emit(f"Final:     ${capital:.2f}  ({(capital/START_CAPITAL-1)*100:+.1f}%)")
+    emit(f"Total R:   {total_r:+.1f}R")
+    emit(f"Avg R:     {total_r/total:+.2f}R" if total else "Avg R: n/a")
+    emit(f"Max DD:    {max_dd:.1f}%")
 
     emit("")
     emit("--- Детальный список ---")
     for s in all_signals:
         emit(
             f"{s['time']} | {s['symbol']:12} | sc={s['score']} t={s['touches']} "
-            f"body={s['body']:5.1f}% | {s['result']:10} | {s['bars']} bars"
+            f"body={s['body']:5.1f}% | {s['result']:10} | {s['bars']} bars | {s['r']:+.1f}R"
         )
 
     emit("=" * 64)
