@@ -3,12 +3,14 @@
 RAID Hunter — Historical Backtest v8.31
 Фильтры: body 4-9%, prev_pump<=3%, cooldown 12
 30 days | 250 symbols
+Отчёт → backtests/latest.txt + backtests/bt_YYYY-MM-DD_HHMM.txt
 """
 
 import ccxt
 import time
 from datetime import datetime, timezone
 from collections import defaultdict
+from pathlib import Path
 
 TIMEFRAME = "15m"
 MIN_BODY_PCT = 4.0
@@ -229,6 +231,25 @@ def fetch_ohlcv_full(symbol, need):
     return ohlcv[-need:]
 
 
+def _save_report(lines):
+    root = Path(__file__).resolve().parent.parent
+    out_dir = root / "backtests"
+    out_dir.mkdir(exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
+    path = out_dir / f"bt_{stamp}.txt"
+    latest = out_dir / "latest.txt"
+    header = [
+        f"RAID Backtest report | {stamp} UTC",
+        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | prev<={MAX_PREV_BODY_PCT}% | cd={COOLDOWN_BARS}",
+        f"Days={LOOKBACK_DAYS} | Symbols<={MAX_SYMBOLS}",
+        "",
+    ]
+    text = "\n".join(header + lines) + "\n"
+    path.write_text(text, encoding="utf-8")
+    latest.write_text(text, encoding="utf-8")
+    return path
+
+
 def main():
     print("=" * 64)
     print("RAID Backtest v8.31")
@@ -279,34 +300,45 @@ def main():
         print(f"[{idx}/{len(symbols)}] {symbol.split('/')[0]}: {found} signals")
         time.sleep(SLEEP)
 
-    print("\n" + "=" * 64)
-    print("SUMMARY")
-    print("=" * 64)
+    lines = []
+    def emit(s=""):
+        print(s)
+        lines.append(s)
+
+    emit("")
+    emit("=" * 64)
+    emit("SUMMARY")
+    emit("=" * 64)
     total = stats["TOTAL"]
     if total == 0:
-        print("Сигналов не найдено.")
+        emit("Сигналов не найдено.")
+        path = _save_report(lines)
+        print(f"Отчёт сохранён: {path}")
         return
 
     wins = stats["TP2"] + stats["TP1+TP2"] + stats["TP1"]
     losses = stats["STOP"] + stats["TP1->STOP"]
-    print(f"Всего сигналов: {total}")
-    print(f"Wins (TP1/TP2):  {wins}  ({wins/total*100:.1f}%)")
-    print(f"Losses (STOP):   {losses}  ({losses/total*100:.1f}%)")
-    print(f"OPEN:            {stats['OPEN']}")
-    print()
+    emit(f"Всего сигналов: {total}")
+    emit(f"Wins (TP1/TP2):  {wins}  ({wins/total*100:.1f}%)")
+    emit(f"Losses (STOP):   {losses}  ({losses/total*100:.1f}%)")
+    emit(f"OPEN:            {stats['OPEN']}")
+    emit("")
     for r in ["TP2", "TP1+TP2", "TP1", "TP1->STOP", "STOP", "OPEN"]:
         if stats[r]:
-            print(f"  {r:12}: {stats[r]}")
+            emit(f"  {r:12}: {stats[r]}")
 
-    print("\n--- Детальный список ---")
+    emit("")
+    emit("--- Детальный список ---")
     for s in all_signals:
-        print(
+        emit(
             f"{s['time']} | {s['symbol']:12} | sc={s['score']} t={s['touches']} "
             f"body={s['body']:5.1f}% | {s['result']:10} | {s['bars']} bars"
         )
 
-    print("=" * 64)
-    print("Готово. Скопируй SUMMARY + список и пришли.")
+    emit("=" * 64)
+    emit("Готово.")
+    path = _save_report(lines)
+    print(f"Отчёт сохранён: {path}")
 
 
 if __name__ == "__main__":
