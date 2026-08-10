@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """
-RAID Hunter — Historical Backtest v8.33
-Фильтры: body 4-9%, prev<=3%, cooldown 32,
-         close in bottom 35% of range, body/range>=50%,
-         STOP-cooldown 96 bars (24h) per symbol
-Confirmation: next bar must not hit stop
-Equity: $300 start, 2% risk, BE after TP1
+RAID Hunter — Historical Backtest v8.32 (confirm OFF)
+body 4-9%, close-strength, stop-cd 24h, equity $300 BE after TP1
+CONFIRM_BARS=0 → immediate entry on raid close
 """
 
 import ccxt
@@ -18,11 +15,11 @@ TIMEFRAME = "15m"
 MIN_BODY_PCT = 4.0
 MAX_BODY_PCT = 9.0
 MAX_PREV_BODY_PCT = 3.0
-COOLDOWN_BARS = 32          # 8ч после любого сигнала по символу
-STOP_COOLDOWN_BARS = 96     # 24ч после STOP по символу
-CONFIRM_BARS = 1            # вход после N свечей подтверждения (стоп не снят)
-CLOSE_IN_RANGE_MAX = 0.35   # close в нижних 35% диапазона свечи
-MIN_BODY_TO_RANGE = 0.50    # тело >= 50% диапазона (не фитильная свеча)
+COOLDOWN_BARS = 32
+STOP_COOLDOWN_BARS = 96
+CONFIRM_BARS = 0  # 0 = no confirm (v8.32)
+CLOSE_IN_RANGE_MAX = 0.35
+MIN_BODY_TO_RANGE = 0.50
 IMPULSE_STRENGTH = 1.25
 VOLUME_RATIO = 1.7
 PRIOR_VOLUME_MULT = 1.35
@@ -133,7 +130,7 @@ def find_equal_lows(ohlcv, i, atr):
 
 
 def check_at(ohlcv, i):
-    if i < 70 or i + CONFIRM_BARS >= len(ohlcv) - 1:
+    if i < 70 or i + max(CONFIRM_BARS, 0) >= len(ohlcv) - 1:
         return None
     last, prev = ohlcv[i], ohlcv[i - 1]
     open_p, high_p, low_p, close_p, volume = last[1], last[2], last[3], last[4], last[5]
@@ -178,11 +175,9 @@ def check_at(ohlcv, i):
     rng = high_p - low_p
     if rng <= 0:
         return None
-    close_pos = (close_p - low_p) / rng
-    if close_pos > CLOSE_IN_RANGE_MAX:
+    if (close_p - low_p) / rng > CLOSE_IN_RANGE_MAX:
         return None
-    body = abs(close_p - open_p)
-    if body / rng < MIN_BODY_TO_RANGE:
+    if abs(close_p - open_p) / rng < MIN_BODY_TO_RANGE:
         return None
 
     if volume < max(prev[5] * CONDITION_D, zone.get("avg_vol", 0) * 1.15):
@@ -201,18 +196,23 @@ def check_at(ohlcv, i):
 
 
 def confirm_entry(ohlcv, cand):
-    """После рейда ждём CONFIRM_BARS. Если стоп снят — reject. Entry = close confirm."""
+    """CONFIRM_BARS=0 → entry on raid close."""
     i = cand["bar_index"]
     stop = cand["stop"]
-    if i + CONFIRM_BARS >= len(ohlcv) - 1:
-        return None
-    for k in range(1, CONFIRM_BARS + 1):
-        bar = ohlcv[i + k]
-        if bar[2] >= stop:
+    if CONFIRM_BARS <= 0:
+        entry = cand["raid_close"]
+        conf_i = i
+        ts = cand["ts"]
+    else:
+        if i + CONFIRM_BARS >= len(ohlcv) - 1:
             return None
-    conf_i = i + CONFIRM_BARS
-    conf = ohlcv[conf_i]
-    entry = conf[4]
+        for k in range(1, CONFIRM_BARS + 1):
+            if ohlcv[i + k][2] >= stop:
+                return None
+        conf_i = i + CONFIRM_BARS
+        conf = ohlcv[conf_i]
+        entry = conf[4]
+        ts = conf[0]
     if entry >= stop:
         return None
     risk = stop - entry
@@ -222,17 +222,11 @@ def confirm_entry(ohlcv, cand):
         stop = entry * (1 + MAX_RISK_PCT)
         risk = stop - entry
     return {
-        "ts": conf[0],
-        "entry": entry,
-        "stop": stop,
-        "tp1": entry - risk * TP1_RR,
-        "tp2": entry - risk * TP2_RR,
-        "risk": risk,
-        "body_pct": cand["body_pct"],
-        "zone_score": cand["zone_score"],
-        "zone_touches": cand["zone_touches"],
-        "bar_index": conf_i,
-        "raid_index": i,
+        "ts": ts, "entry": entry, "stop": stop,
+        "tp1": entry - risk * TP1_RR, "tp2": entry - risk * TP2_RR,
+        "risk": risk, "body_pct": cand["body_pct"],
+        "zone_score": cand["zone_score"], "zone_touches": cand["zone_touches"],
+        "bar_index": conf_i, "raid_index": i,
     }
 
 
@@ -269,9 +263,8 @@ def top_symbols(n=MAX_SYMBOLS):
         s for s, m in markets.items()
         if m.get("swap") and m.get("quote") == "USDT" and m.get("active") and s.endswith(":USDT")
     ]
-    symbols = symbols[:n]
-    print(f"Символов для прогона: {len(symbols)}")
-    return symbols
+    print(f"Символов для прогона: {len(symbols[:n])}")
+    return symbols[:n]
 
 
 def fetch_ohlcv_full(symbol, need):
@@ -301,7 +294,7 @@ def _save_report(lines):
     latest = out_dir / "latest.txt"
     header = [
         f"RAID Backtest report | {stamp} UTC",
-        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | confirm={CONFIRM_BARS} | close<={CLOSE_IN_RANGE_MAX} | body/rng>={MIN_BODY_TO_RANGE} | BE | $300",
+        f"Filters: body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | confirm={CONFIRM_BARS} | close<={CLOSE_IN_RANGE_MAX} | BE | $300",
         f"Days={LOOKBACK_DAYS} | Symbols<={MAX_SYMBOLS}",
         "",
     ]
@@ -313,12 +306,9 @@ def _save_report(lines):
 
 def main():
     print("=" * 64)
-    print("RAID Backtest v8.33")
-    print(
-        f"Days={LOOKBACK_DAYS} | Sym<={MAX_SYMBOLS} | "
-        f"Body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS} | confirm={CONFIRM_BARS} | close<={CLOSE_IN_RANGE_MAX}"
-    )
-    print(f"Capital=${START_CAPITAL:.0f} | Risk={RISK_PER_TRADE*100:.0f}% | BE after TP1={BE_AFTER_TP1}")
+    print("RAID Backtest v8.32 (confirm OFF)")
+    print(f"Days={LOOKBACK_DAYS} | confirm={CONFIRM_BARS} | cd={COOLDOWN_BARS} | stop_cd={STOP_COOLDOWN_BARS}")
+    print(f"Capital=${START_CAPITAL:.0f} | Risk={RISK_PER_TRADE*100:.0f}% | BE={BE_AFTER_TP1}")
     print("=" * 64)
 
     symbols = top_symbols()
@@ -331,7 +321,6 @@ def main():
         except Exception as e:
             print(f"[{idx}/{len(symbols)}] {symbol}: skip ({e})")
             continue
-
         if len(ohlcv) < 100:
             continue
 
@@ -356,7 +345,6 @@ def main():
                 stop_ban_until = sig["bar_index"] + STOP_COOLDOWN_BARS
             stats[res] += 1
             stats["TOTAL"] += 1
-            stats[f"score_{sig['zone_score']}"] += 1
             stats["sum_R"] += r_mult
 
             ts = datetime.fromtimestamp(sig["ts"] / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
@@ -373,26 +361,20 @@ def main():
 
     lines = []
     def emit(s=""):
-        print(s)
-        lines.append(s)
+        print(s); lines.append(s)
 
-    emit("")
-    emit("=" * 64)
-    emit("SUMMARY")
-    emit("=" * 64)
+    emit(""); emit("=" * 64); emit("SUMMARY"); emit("=" * 64)
     total = stats["TOTAL"]
     if total == 0:
         emit("Сигналов не найдено.")
-        path = _save_report(lines)
-        print(f"Отчёт сохранён: {path}")
+        print(f"Отчёт: {_save_report(lines)}")
         return
 
     wins = stats["TP2"] + stats["TP1+TP2"] + stats["TP1"]
     losses = stats["STOP"] + stats["TP1->STOP"]
-    be = stats["TP1->BE"]
     emit(f"Всего сигналов: {total}")
     emit(f"Wins (TP1/TP2):  {wins}  ({wins/total*100:.1f}%)")
-    emit(f"BE after TP1:    {be}")
+    emit(f"BE after TP1:    {stats['TP1->BE']}")
     emit(f"Losses (STOP):   {losses}  ({losses/total*100:.1f}%)")
     emit(f"OPEN:            {stats['OPEN']}")
     emit("")
@@ -401,12 +383,10 @@ def main():
             emit(f"  {r:12}: {stats[r]}")
 
     all_signals.sort(key=lambda x: x["time"])
-
     capital = START_CAPITAL
     peak = capital
     max_dd = 0.0
-    emit("")
-    emit("--- Equity ($300 start, 2% risk, BE after TP1) ---")
+    emit(""); emit("--- Equity ($300 start, 2% risk, BE after TP1) ---")
     emit(f"{'time':16} {'sym':12} {'result':10} {'R':>6} {'risk$':>8} {'pnl$':>8} {'equity':>10}")
     for s in all_signals:
         risk_usd = capital * RISK_PER_TRADE
@@ -415,30 +395,19 @@ def main():
         peak = max(peak, capital)
         dd = (peak - capital) / peak * 100 if peak > 0 else 0
         max_dd = max(max_dd, dd)
-        emit(
-            f"{s['time']:16} {s['symbol']:12} {s['result']:10} {s['r']:+5.1f}R "
-            f"{risk_usd:8.2f} {pnl:+8.2f} {capital:10.2f}"
-        )
+        emit(f"{s['time']:16} {s['symbol']:12} {s['result']:10} {s['r']:+5.1f}R {risk_usd:8.2f} {pnl:+8.2f} {capital:10.2f}")
     total_r = stats["sum_R"]
     emit("")
     emit(f"Start:     ${START_CAPITAL:.2f}")
     emit(f"Final:     ${capital:.2f}  ({(capital/START_CAPITAL-1)*100:+.1f}%)")
     emit(f"Total R:   {total_r:+.1f}R")
-    emit(f"Avg R:     {total_r/total:+.2f}R" if total else "Avg R: n/a")
+    emit(f"Avg R:     {total_r/total:+.2f}R")
     emit(f"Max DD:    {max_dd:.1f}%")
-
-    emit("")
-    emit("--- Детальный список ---")
+    emit(""); emit("--- Детальный список ---")
     for s in all_signals:
-        emit(
-            f"{s['time']} | {s['symbol']:12} | sc={s['score']} t={s['touches']} "
-            f"body={s['body']:5.1f}% | {s['result']:10} | {s['bars']} bars | {s['r']:+.1f}R"
-        )
-
-    emit("=" * 64)
-    emit("Готово.")
-    path = _save_report(lines)
-    print(f"Отчёт сохранён: {path}")
+        emit(f"{s['time']} | {s['symbol']:12} | sc={s['score']} t={s['touches']} body={s['body']:5.1f}% | {s['result']:10} | {s['bars']} bars | {s['r']:+.1f}R")
+    emit("=" * 64); emit("Готово.")
+    print(f"Отчёт сохранён: {_save_report(lines)}")
 
 
 if __name__ == "__main__":
