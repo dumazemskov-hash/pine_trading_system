@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RAID / DUMP Control Panel — две стратегии рядом + paper."""
+"""RAID / DUMP Control Panel — две стратегии рядом + paper + DUMP-struct."""
 
 import os, sys, subprocess, threading, queue, shutil
 from datetime import datetime
@@ -17,6 +17,7 @@ RAID_SCRIPT = SCANNER_DIR / "v8.32-exp.py"
 DUMP_SCRIPT = SCANNER_DIR / "dump_scanner.py"
 RAID_BT = SCANNER_DIR / "backtest.py"
 DUMP_BT = SCANNER_DIR / "backtest_dump.py"
+DUMP_STRUCT_BT = SCANNER_DIR / "backtest_dump_struct.py"
 CHECK_SCRIPT = SCANNER_DIR / "check_signals.py"
 PAPER_SCRIPT = SCANNER_DIR / "paper_engine.py"
 if not RAID_SCRIPT.exists():
@@ -33,7 +34,7 @@ class ControlPanel(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("RAID / DUMP — Control Panel")
-        self.geometry("920x680")
+        self.geometry("920x720")
         self.minsize(720, 520)
         self.configure(bg="#1e1e1e")
         self.raid_proc = None
@@ -82,8 +83,10 @@ class ControlPanel(tk.Tk):
         for text, cmd in [
             ("▶ Запустить DUMP", self.cmd_start_dump),
             ("■ Остановить DUMP", self.cmd_stop_dump),
-            ("Бэктест DUMP", self.cmd_bt_dump),
-            ("Последний DUMP BT", self.cmd_show_dump_bt),
+            ("Бэктест DUMP v0.2", self.cmd_bt_dump),
+            ("Последний DUMP v0.2", self.cmd_show_dump_bt),
+            ("Бэктест DUMP-STRUCT", self.cmd_bt_dump_struct),
+            ("Последний DUMP-STRUCT", self.cmd_show_dump_struct_bt),
             ("Открыть signals_dump", self.cmd_open_dump_signals),
             ("Push логов DUMP", self.cmd_push_dump_logs),
         ]:
@@ -200,14 +203,14 @@ class ControlPanel(tk.Tk):
         def job():
             self._log(f"--- {name} ---")
             if not script.exists():
-                self._log(f"Нет: {script}"); return
+                self._log(f"Нет: {script} — git pull"); return
             try:
                 p = subprocess.Popen([sys.executable, "-u", str(script)], cwd=str(SCANNER_DIR),
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                     encoding="utf-8", errors="replace", bufsize=1, env=self._env())
                 for line in p.stdout:
                     if line.rstrip(): self._log(line.rstrip())
-                code = p.wait(timeout=1)
+                code = p.wait()
                 self._log(f"{name} OK" if code == 0 else f"exit {code}")
                 self._log("Push all")
             except Exception as e:
@@ -268,8 +271,10 @@ class ControlPanel(tk.Tk):
 
     def cmd_start_dump(self): self._start_proc(DUMP_SCRIPT, "DUMP", "dump_proc", self.dump_status)
     def cmd_stop_dump(self): self._stop_proc("dump_proc", "DUMP", self.dump_status)
-    def cmd_bt_dump(self): self._run_bt(DUMP_BT, "DUMP BT")
+    def cmd_bt_dump(self): self._run_bt(DUMP_BT, "DUMP BT v0.2")
     def cmd_show_dump_bt(self): self._show_file(BACKTESTS_DIR / "latest_dump.txt")
+    def cmd_bt_dump_struct(self): self._run_bt(DUMP_STRUCT_BT, "DUMP-STRUCT BT")
+    def cmd_show_dump_struct_bt(self): self._show_file(BACKTESTS_DIR / "latest_dump_struct.txt")
 
     def cmd_push_dump_logs(self):
         def job():
