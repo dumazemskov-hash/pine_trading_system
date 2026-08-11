@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-DUMP-STRUCT backtest | 60d top-150
-Идея: памп → проторговка (range) → снос лоя range → шорт за ликвидностью.
-
-Не путать с v0.2 (импульсная красная свеча).
+DUMP-STRUCT v2 | 60d top-150
+Памп → плотная проторговка → снос лоя → шорт.
+Жёсткие фильтры: меньше сигналов, ближе к ручному сетапу.
 """
 
 import ccxt
@@ -20,31 +19,33 @@ SLEEP = 0.10
 TP1_RR, TP2_RR = 1.6, 3.0
 START_CAPITAL = 300.0
 BE_AFTER_TP1 = True
-COOLDOWN_PER_SYMBOL = 48
+COOLDOWN_PER_SYMBOL = 64
 STOP_COOLDOWN = 96
 
-# --- варианты ---
-# pump_lb / pump_min: импульс ДО начала range
-# range_min / range_max: длина проторговки в барах
-# range_h_min / range_h_max: высота range в % от mid
-# stop_mode: "range_high" | "sweep_high"
+# v2 base: strict
 BASE = dict(
-    pump_lb=16, pump_min=6.0,
-    range_min=6, range_max=28,
-    range_h_min=0.8, range_h_max=5.0,
+    pump_lb=12,
+    pump_min=10.0,          # импульс ≥10%
+    range_min=10,
+    range_max=24,
+    range_h_min=1.5,
+    range_h_max=4.0,
+    min_touches_low=2,      # касания low range до sweep
+    vol_ratio=1.5,          # объём sweep ≥ 1.5x MA
     stop_mode="range_high",
     risk_pct=0.02,
-    require_close_below=True,  # close < range_low, не только wick
+    require_close_below=True,
+    max_stop_pct=0.06,      # skip if stop > 6%
 )
 
 VARIANTS = {
-    "v1_base":      {**BASE},
-    "v1_pump8":     {**BASE, "pump_min": 8.0},
-    "v1_range8_24": {**BASE, "range_min": 8, "range_max": 24},
-    "v1_tight":     {**BASE, "range_h_min": 1.0, "range_h_max": 3.5},
-    "v1_sweep_hi":  {**BASE, "stop_mode": "sweep_high"},
-    "v1_wick_ok":   {**BASE, "require_close_below": False},
-    "v1_risk3":     {**BASE, "risk_pct": 0.03},
+    "v2_base":       {**BASE},
+    "v2_pump12":     {**BASE, "pump_min": 12.0},
+    "v2_touch3":     {**BASE, "min_touches_low": 3},
+    "v2_vol2":       {**BASE, "vol_ratio": 2.0},
+    "v2_range12":    {**BASE, "range_min": 12, "range_max": 20},
+    "v2_sweep_hi":   {**BASE, "stop_mode": "sweep_high"},
+    "v2_strict":     {**BASE, "pump_min": 12.0, "min_touches_low": 3, "vol_ratio": 2.0, "range_min": 12},
 }
 
 exchange = ccxt.bybit({
@@ -54,7 +55,6 @@ exchange = ccxt.bybit({
 
 
 def had_pump_before(ohlcv, range_start, pump_lb, pump_min):
-    """Памп в окне [range_start - pump_lb, range_start)."""
     a = range_start - pump_lb
     if a < 1:
         return False
@@ -74,18 +74,37 @@ def had_pump_before(ohlcv, range_start, pump_lb, pump_min):
     return False
 
 
+def count_low_touches(rng_bars, rl, tol_pct=0.15):
+    """Сколько раз low бара касался зоны range low (в пределах tol)."""
+    if rl <= 0:
+        return 0
+    tol = rl * tol_pct / 100
+    n = 0
+    for c in rng_bars:
+        if abs(c[3] - rl) <= tol or (c[3] <= rl * 1.002 and c[3] >= rl * 0.998):
+            n += 1
+        elif c[3] <= rl * 1.005 and c[2] > rl:
+            # wick near low
+            n += 1
+    return n
+
+
 def find_signal_at(ohlcv, i, cfg):
-    """
-    i = индекс бара-кандидата на sweep (последний закрытый).
-    Ищем range, заканчивающийся на i-1, sweep на i.
-    """
-    if i < 40 or i >= len(ohlcv) - 1:
+    if i < 50 or i >= len(ohlcv) - 1:
         return None
 
-    # range ends at i-1, length L in [range_min, range_max]
+    bar = ohlcv[i]
+    o, h, l, c, v = bar[1], bar[2], bar[3], bar[4], bar[5]
+
+    # volume filter on sweep bar
+    if i >= 21:
+        vol_ma = sum(x[5] for x in ohlcv[i - 20:i]) / 20
+        if vol_ma > 0 and v < vol_ma * cfg["vol_ratio"]:
+            return None
+
     for L in range(cfg["range_min"], cfg["range_max"] + 1):
         range_start = i - L
-        range_end = i  # exclusive end index = i (bars range_start .. i-1)
+        range_end = i
         if range_start < 2:
             continue
         if not had_pump_before(ohlcv, range_start, cfg["pump_lb"], cfg["pump_min"]):
@@ -95,8 +114,8 @@ def find_signal_at(ohlcv, i, cfg):
         if len(rng_bars) < cfg["range_min"]:
             continue
 
-        rh = max(c[2] for c in rng_bars)
-        rl = min(c[3] for c in rng_bars)
+        rh = max(x[2] for x in rng_bars)
+        rl = min(x[3] for x in rng_bars)
         mid = (rh + rl) / 2
         if mid <= 0:
             continue
@@ -104,17 +123,18 @@ def find_signal_at(ohlcv, i, cfg):
         if height_pct < cfg["range_h_min"] or height_pct > cfg["range_h_max"]:
             continue
 
-        # необязательно: mid range roughly after pump (price elevated)
-        # sweep bar
-        bar = ohlcv[i]
-        o, h, l, c = bar[1], bar[2], bar[3], bar[4]
-        if l >= rl:
-            continue  # no sweep of range low
+        # range should not already be broken above mid of pump aggressively
+        # touches of low before this bar
+        touches = count_low_touches(rng_bars, rl)
+        if touches < cfg["min_touches_low"]:
+            continue
 
+        # sweep
+        if l >= rl:
+            continue
         if cfg["require_close_below"] and c >= rl:
             continue
 
-        # entry short
         entry = c
         if cfg["stop_mode"] == "sweep_high":
             stop = h * 1.001
@@ -125,11 +145,7 @@ def find_signal_at(ohlcv, i, cfg):
         if risk <= 0:
             continue
         risk_pct = risk / entry
-        # cap extreme stops — skip if > 8%
-        if risk_pct > 0.08:
-            continue
-        # too tight noise
-        if risk_pct < 0.003:
+        if risk_pct > cfg["max_stop_pct"] or risk_pct < 0.004:
             continue
 
         return {
@@ -142,6 +158,7 @@ def find_signal_at(ohlcv, i, cfg):
             "risk_pct_px": risk_pct * 100,
             "range_h": round(height_pct, 2),
             "range_bars": L,
+            "touches": touches,
             "bar_index": i,
             "rl": rl,
             "rh": rh,
@@ -239,6 +256,7 @@ def run_variant(name, cfg, by_sym):
                 "r": r,
                 "range_h": sig["range_h"],
                 "range_bars": sig["range_bars"],
+                "touches": sig["touches"],
                 "stop_pct": round(sig["risk_pct_px"], 2),
             })
     raw.sort(key=lambda x: (x["ts_ms"], x["symbol"]))
@@ -264,8 +282,8 @@ def run_variant(name, cfg, by_sym):
         f"SUMMARY | DUMP-STRUCT {name}",
         (
             f"pump>={cfg['pump_min']}%/{cfg['pump_lb']}b range={cfg['range_min']}-{cfg['range_max']}b "
-            f"h={cfg['range_h_min']}-{cfg['range_h_max']}% stop={cfg['stop_mode']} "
-            f"close_below={cfg['require_close_below']} $risk={rp*100:.0f}%"
+            f"h={cfg['range_h_min']}-{cfg['range_h_max']}% touches>={cfg['min_touches_low']} "
+            f"vol>={cfg['vol_ratio']}x stop={cfg['stop_mode']} $risk={rp*100:.0f}%"
         ),
         "=" * 64,
     ]
@@ -276,6 +294,7 @@ def run_variant(name, cfg, by_sym):
     avg_h = sum(s["range_h"] for s in raw) / total
     avg_lb = sum(s["range_bars"] for s in raw) / total
     avg_stop = sum(s["stop_pct"] for s in raw) / total
+    avg_t = sum(s["touches"] for s in raw) / total
     lines += [
         f"Всего: {total}",
         f"Wins:  {wins} ({wins/total*100:.1f}%)",
@@ -288,7 +307,7 @@ def run_variant(name, cfg, by_sym):
             lines.append(f"  {r}: {stats[r]}")
     lines += [
         "",
-        f"avg range_h={avg_h:.2f}%  avg range_bars={avg_lb:.1f}  avg_stop={avg_stop:.2f}%",
+        f"avg range_h={avg_h:.2f}%  bars={avg_lb:.1f}  touches={avg_t:.1f}  stop={avg_stop:.2f}%",
         f"Start ${START_CAPITAL:.2f} → Final ${capital:.2f} ({(capital/START_CAPITAL-1)*100:+.1f}%)",
         f"Total R {stats['sum_R']:+.1f} | Avg {stats['sum_R']/total:+.2f}R | MaxDD {max_dd:.1f}%",
         "",
@@ -298,7 +317,7 @@ def run_variant(name, cfg, by_sym):
 
 def main():
     print("=" * 64)
-    print("DUMP-STRUCT | pump → range → sweep low | 60d top-150")
+    print("DUMP-STRUCT v2 STRICT | pump→range→sweep | 60d top-150")
     print("=" * 64)
     symbols = top_symbols()
     by_sym = {}
@@ -315,7 +334,7 @@ def main():
     print(f"\nЗагружено: {len(by_sym)}\n")
 
     all_lines = [
-        f"DUMP-STRUCT | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
+        f"DUMP-STRUCT v2 | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
         f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)}",
         "",
     ]
@@ -331,7 +350,7 @@ def main():
     out = root / "backtests"
     out.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-    path = out / f"bt_DUMP_STRUCT_{stamp}.txt"
+    path = out / f"bt_DUMP_STRUCT_v2_{stamp}.txt"
     latest = out / "latest_dump_struct.txt"
     text = "\n".join(all_lines) + "\n"
     path.write_text(text, encoding="utf-8")
