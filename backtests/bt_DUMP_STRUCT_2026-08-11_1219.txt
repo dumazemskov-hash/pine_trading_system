@@ -1,0 +1,150 @@
+DUMP-STRUCT | 2026-08-11_1215 UTC
+Days=60 | symbols=150
+
+================================================================
+SUMMARY | DUMP-STRUCT v1_base
+pump>=6.0%/16b range=6-28b h=0.8-5.0% stop=range_high close_below=True $risk=2%
+================================================================
+Всего: 1286
+Wins:  246 (19.1%)
+BE:    206
+STOP:  812 (63.1%)  | 1-bar STOP: 11
+OPEN:  22
+  TP2: 14
+  TP1+TP2: 220
+  TP1: 12
+  TP1->BE: 206
+  STOP: 812
+  OPEN: 22
+
+avg range_h=2.73%  avg range_bars=8.1  avg_stop=3.46%
+Start $300.00 → Final $38.74 (-87.1%)
+Total R -80.0 | Avg -0.06R | MaxDD 92.6%
+
+
+================================================================
+SUMMARY | DUMP-STRUCT v1_pump8
+pump>=8.0%/16b range=6-28b h=0.8-5.0% stop=range_high close_below=True $risk=2%
+================================================================
+Всего: 817
+Wins:  145 (17.7%)
+BE:    123
+STOP:  534 (65.4%)  | 1-bar STOP: 8
+OPEN:  15
+  TP2: 9
+  TP1+TP2: 133
+  TP1: 3
+  TP1->BE: 123
+  STOP: 534
+  OPEN: 15
+
+avg range_h=3.04%  avg range_bars=7.9  avg_stop=3.86%
+Start $300.00 → Final $32.08 (-89.3%)
+Total R -97.9 | Avg -0.12R | MaxDD 91.4%
+
+
+================================================================
+SUMMARY | DUMP-STRUCT v1_range8_24
+pump>=6.0%/16b range=8-24b h=0.8-5.0% stop=range_high close_below=True $risk=2%
+================================================================
+Всего: 1135
+Wins:  208 (18.3%)
+BE:    171
+STOP:  735 (64.8%)  | 1-bar STOP: 12
+OPEN:  21
+  TP2: 11
+  TP1+TP2: 188
+  TP1: 9
+  TP1->BE: 171
+  STOP: 735
+  OPEN: 21
+
+avg range_h=2.90%  avg range_bars=9.8  avg_stop=3.63%
+Start $300.00 → Final $19.08 (-93.6%)
+Total R -118.4 | Avg -0.10R | MaxDD 95.3%
+
+
+================================================================
+SUMMARY | DUMP-STRUCT v1_tight
+pump>=6.0%/16b range=6-28b h=1.0-3.5% stop=range_high close_below=True $risk=2%
+================================================================
+Всего: 1142
+Wins:  207 (18.1%)
+BE:    183
+STOP:  734 (64.3%)  | 1-bar STOP: 15
+OPEN:  18
+  TP2: 8
+  TP1+TP2: 190
+  TP1: 9
+  TP1->BE: 183
+  STOP: 734
+  OPEN: 18
+
+avg range_h=2.31%  avg range_bars=7.8  avg_stop=3.00%
+Start $300.00 → Final $21.64 (-92.8%)
+Total R -112.2 | Avg -0.10R | MaxDD 96.3%
+
+
+================================================================
+SUMMARY | DUMP-STRUCT v1_sweep_hi
+pump>=6.0%/16b range=6-28b h=0.8-5.0% stop=sweep_high close_below=True $risk=2%
+================================================================
+Всего: 1285
+Wins:  233 (18.1%)
+BE:    223
+STOP:  825 (64.2%)  | 1-bar STOP: 159
+OPEN:  4
+  TP2: 36
+  TP1+TP2: 196
+  TP1: 1
+  TP1->BE: 223
+  STOP: 825
+  OPEN: 4
+
+avg range_h=2.73%  avg range_bars=8.2  avg_stop=1.64%
+Start $300.00 → Final $33.79 (-88.7%)
+Total R -86.2 | Avg -0.07R | MaxDD 95.1%
+
+
+================================================================
+SUMMARY | DUMP-STRUCT v1_wick_ok
+pump>=6.0%/16b range=6-28b h=0.8-5.0% stop=range_high close_below=False $risk=2%
+================================================================
+Всего: 1495
+Wins:  277 (18.5%)
+BE:    272
+STOP:  926 (61.9%)  | 1-bar STOP: 50
+OPEN:  20
+  TP2: 20
+  TP1+TP2: 242
+  TP1: 15
+  TP1->BE: 272
+  STOP: 926
+  OPEN: 20
+
+avg range_h=2.76%  avg range_bars=7.4  avg_stop=2.94%
+Start $300.00 → Final $46.30 (-84.6%)
+Total R -67.8 | Avg -0.05R | MaxDD 94.6%
+
+
+================================================================
+SUMMARY | DUMP-STRUCT v1_risk3
+pump>=6.0%/16b range=6-28b h=0.8-5.0% stop=range_high close_below=True $risk=3%
+================================================================
+Всего: 1286
+Wins:  246 (19.1%)
+BE:    206
+STOP:  812 (63.1%)  | 1-bar STOP: 11
+OPEN:  22
+  TP2: 14
+  TP1+TP2: 220
+  TP1: 12
+  TP1->BE: 206
+  STOP: 812
+  OPEN: 22
+
+avg range_h=2.73%  avg range_bars=8.1  avg_stop=3.46%
+Start $300.00 → Final $10.02 (-96.7%)
+Total R -80.0 | Avg -0.06R | MaxDD 98.5%
+
+
