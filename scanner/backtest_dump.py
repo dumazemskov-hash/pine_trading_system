@@ -26,13 +26,13 @@ STOP_COOLDOWN = 96
 BASE = dict(pump_lb=6, pump_min=8.0, min_body=5.0, max_body=9.0, vol_ratio=2.5, risk_pct=0.02)
 
 VARIANTS = {
-    "cap_2pct":      dict(**BASE, stop_atr=0.35, max_stop_pct=0.02, mode="cap"),
-    "s035_max08":    dict(**BASE, stop_atr=0.35, max_stop_pct=0.08, mode="struct"),
-    "s035_max10":    dict(**BASE, stop_atr=0.35, max_stop_pct=0.10, mode="struct"),
-    "s035_max12":    dict(**BASE, stop_atr=0.35, max_stop_pct=0.12, mode="struct"),
-    "s035_max15":    dict(**BASE, stop_atr=0.35, max_stop_pct=0.15, mode="struct"),
-    "s050_max12":    dict(**BASE, stop_atr=0.50, max_stop_pct=0.12, mode="struct"),
-    "s035_max12_r3": dict(**BASE, stop_atr=0.35, max_stop_pct=0.12, mode="struct", risk_pct=0.03),
+    "cap_2pct":   {**BASE, "stop_atr": 0.35, "max_stop_pct": 0.02, "mode": "cap"},
+    "s035_max08": {**BASE, "stop_atr": 0.35, "max_stop_pct": 0.08, "mode": "struct"},
+    "s035_max10": {**BASE, "stop_atr": 0.35, "max_stop_pct": 0.10, "mode": "struct"},
+    "s035_max12": {**BASE, "stop_atr": 0.35, "max_stop_pct": 0.12, "mode": "struct"},
+    "s035_max15": {**BASE, "stop_atr": 0.35, "max_stop_pct": 0.15, "mode": "struct"},
+    "s050_max12": {**BASE, "stop_atr": 0.50, "max_stop_pct": 0.12, "mode": "struct"},
+    "s035_max12_r3": {**BASE, "stop_atr": 0.35, "max_stop_pct": 0.12, "mode": "struct", "risk_pct": 0.03},
 }
 
 exchange = ccxt.bybit({"enableRateLimit": True, "options": {"defaultType": "swap", "fetchMarkets": ["linear"]}})
