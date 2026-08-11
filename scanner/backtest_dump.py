@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-DUMP lab | struct max_stop sweep | 60d top-150
+DUMP lab | skip_wide_bar on cap-2% | 60d top-150
+Если (high-entry)/entry > threshold — skip (стоп 2% в шуме бара).
 """
 
 import ccxt, time
@@ -22,31 +23,19 @@ BE_AFTER_TP1 = True
 COOLDOWN_PER_SYMBOL = 32
 STOP_COOLDOWN = 96
 
-# no risk_pct here — set per variant
-BASE = dict(pump_lb=6, pump_min=8.0, min_body=5.0, max_body=9.0, vol_ratio=2.5)
+BASE = dict(
+    pump_lb=6, pump_min=8.0, min_body=5.0, max_body=9.0, vol_ratio=2.5,
+    stop_atr=0.35, max_stop_pct=0.02, mode="cap", risk_pct=0.02,
+)
 
 VARIANTS = {
-    "cap_2pct": {
-        **BASE, "stop_atr": 0.35, "max_stop_pct": 0.02, "mode": "cap", "risk_pct": 0.02,
-    },
-    "s035_max08": {
-        **BASE, "stop_atr": 0.35, "max_stop_pct": 0.08, "mode": "struct", "risk_pct": 0.02,
-    },
-    "s035_max10": {
-        **BASE, "stop_atr": 0.35, "max_stop_pct": 0.10, "mode": "struct", "risk_pct": 0.02,
-    },
-    "s035_max12": {
-        **BASE, "stop_atr": 0.35, "max_stop_pct": 0.12, "mode": "struct", "risk_pct": 0.02,
-    },
-    "s035_max15": {
-        **BASE, "stop_atr": 0.35, "max_stop_pct": 0.15, "mode": "struct", "risk_pct": 0.02,
-    },
-    "s050_max12": {
-        **BASE, "stop_atr": 0.50, "max_stop_pct": 0.12, "mode": "struct", "risk_pct": 0.02,
-    },
-    "s035_max12_r3": {
-        **BASE, "stop_atr": 0.35, "max_stop_pct": 0.12, "mode": "struct", "risk_pct": 0.03,
-    },
+    "cap_base":    {**BASE, "skip_wide": 99.0},   # no filter
+    "skip_025":    {**BASE, "skip_wide": 0.025},  # high > entry+2.5%
+    "skip_030":    {**BASE, "skip_wide": 0.030},
+    "skip_035":    {**BASE, "skip_wide": 0.035},
+    "skip_040":    {**BASE, "skip_wide": 0.040},
+    "skip_050":    {**BASE, "skip_wide": 0.050},
+    "skip_030_r3": {**BASE, "skip_wide": 0.030, "risk_pct": 0.03},
 }
 
 exchange = ccxt.bybit({"enableRateLimit": True, "options": {"defaultType": "swap", "fetchMarkets": ["linear"]}})
@@ -99,15 +88,15 @@ def check_at(ohlcv, i, cfg):
         return None
     if l > min(x[3] for x in ohlcv[i - SWEEP_LOOKBACK + 1:i + 1]):
         return None
-    atr = calc_atr(ohlcv, i)
+
     entry = c
+    # NEW: skip if dump high is already far above entry (2% stop lives inside noise)
+    if (h - entry) / entry > cfg["skip_wide"]:
+        return None
+
+    atr = calc_atr(ohlcv, i)
     raw_stop = h + (atr * cfg["stop_atr"] if atr else h * 0.005)
-    if cfg["mode"] == "cap":
-        stop = min(raw_stop, entry * (1 + cfg["max_stop_pct"]))
-    else:
-        stop = raw_stop
-        if (stop - entry) / entry > cfg["max_stop_pct"]:
-            return None
+    stop = min(raw_stop, entry * (1 + cfg["max_stop_pct"]))
     risk = stop - entry
     if risk <= 0 or risk / entry < 0.002:
         return None
@@ -115,7 +104,7 @@ def check_at(ohlcv, i, cfg):
         "ts": last[0], "entry": entry, "stop": stop,
         "tp1": entry - risk * TP1_RR, "tp2": entry - risk * TP2_RR,
         "risk": risk, "risk_pct_px": risk / entry * 100,
-        "body": body, "bar_index": i,
+        "body": body, "bar_index": i, "high_dist": (h - entry) / entry * 100,
     }
 
 
@@ -175,7 +164,6 @@ def fetch_ohlcv_full(symbol, need):
 def run_variant(name, cfg, by_sym):
     raw = []
     onebar = 0
-    risk_pcts = []
     for symbol, ohlcv in by_sym.items():
         if len(ohlcv) < 100:
             continue
@@ -188,7 +176,6 @@ def run_variant(name, cfg, by_sym):
                 continue
             res, bars, r = outcome(ohlcv, sig)
             last_i = i
-            risk_pcts.append(sig["risk_pct_px"])
             if res in ("STOP", "TP1->STOP"):
                 stop_ban = i + STOP_COOLDOWN
                 if bars == 1:
@@ -210,12 +197,12 @@ def run_variant(name, cfg, by_sym):
     total = stats["TOTAL"]
     wins = stats["TP2"] + stats["TP1+TP2"] + stats["TP1"]
     losses = stats["STOP"] + stats["TP1->STOP"]
-    avg_stop = sum(risk_pcts) / len(risk_pcts) if risk_pcts else 0
+    sk = cfg["skip_wide"]
+    sk_s = f"{sk*100:.1f}%" if sk < 10 else "off"
     lines = [
         "=" * 64,
         f"SUMMARY | DUMP {name}",
-        f"mode={cfg['mode']} atr={cfg['stop_atr']} max_stop={cfg['max_stop_pct']*100:.0f}% "
-        f"$risk={rp*100:.0f}% | avg_stop={avg_stop:.2f}%",
+        f"cap=2% skip_wide={sk_s} $risk={rp*100:.0f}%",
         "=" * 64,
     ]
     if total == 0:
@@ -242,7 +229,7 @@ def run_variant(name, cfg, by_sym):
 
 def main():
     print("=" * 64)
-    print("DUMP max_stop sweep | 60d | top-150")
+    print("DUMP skip_wide_bar lab | 60d | top-150")
     print("=" * 64)
     symbols = top_symbols()
     by_sym = {}
@@ -258,7 +245,7 @@ def main():
         time.sleep(SLEEP)
     print(f"\nЗагружено: {len(by_sym)}\n")
     all_lines = [
-        f"DUMP max_stop sweep | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
+        f"DUMP skip_wide | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
         f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)}", "",
     ]
     for name, cfg in VARIANTS.items():
@@ -272,7 +259,7 @@ def main():
     out = root / "backtests"
     out.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-    path = out / f"bt_DUMP_SWEEP_{stamp}.txt"
+    path = out / f"bt_DUMP_SKIPWIDE_{stamp}.txt"
     latest = out / "latest_dump.txt"
     text = "\n".join(all_lines) + "\n"
     path.write_text(text, encoding="utf-8")
