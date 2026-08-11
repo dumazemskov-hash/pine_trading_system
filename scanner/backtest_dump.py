@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
-DUMP STRUCT-STOP LAB | 60d | top-150
-Стоп = high + ATR*k (без потолка 2%).
-Риск в $ = capital * risk_pct (размер позиции подстраивается).
-Слишком широкий стоп (>max_stop_pct) — сделка пропускается.
+DUMP lab | struct max_stop sweep | 60d top-150
+Ищем баланс: N сделок vs 1-bar STOP vs Avg R
 """
 
 import ccxt, time
@@ -28,14 +26,13 @@ STOP_COOLDOWN = 96
 BASE = dict(pump_lb=6, pump_min=8.0, min_body=5.0, max_body=9.0, vol_ratio=2.5, risk_pct=0.02)
 
 VARIANTS = {
-    # старый: стоп урезан до 2%
-    "v0.2_cap": dict(**BASE, stop_atr=0.35, max_wick=1.0, max_stop_pct=0.02, mode="cap"),
-    # structural: стоп за high+ATR, max 6-10%
-    "struct_035": dict(**BASE, stop_atr=0.35, max_wick=1.0, max_stop_pct=0.08, mode="struct"),
-    "struct_050": dict(**BASE, stop_atr=0.50, max_wick=1.0, max_stop_pct=0.08, mode="struct"),
-    "struct_065": dict(**BASE, stop_atr=0.65, max_wick=1.0, max_stop_pct=0.08, mode="struct"),
-    "struct_050_w": dict(**BASE, stop_atr=0.50, max_wick=0.25, max_stop_pct=0.08, mode="struct"),
-    "struct_050_m6": dict(**BASE, stop_atr=0.50, max_wick=1.0, max_stop_pct=0.06, mode="struct"),
+    "cap_2pct":      dict(**BASE, stop_atr=0.35, max_stop_pct=0.02, mode="cap"),
+    "s035_max08":    dict(**BASE, stop_atr=0.35, max_stop_pct=0.08, mode="struct"),
+    "s035_max10":    dict(**BASE, stop_atr=0.35, max_stop_pct=0.10, mode="struct"),
+    "s035_max12":    dict(**BASE, stop_atr=0.35, max_stop_pct=0.12, mode="struct"),
+    "s035_max15":    dict(**BASE, stop_atr=0.35, max_stop_pct=0.15, mode="struct"),
+    "s050_max12":    dict(**BASE, stop_atr=0.50, max_stop_pct=0.12, mode="struct"),
+    "s035_max12_r3": dict(**BASE, stop_atr=0.35, max_stop_pct=0.12, mode="struct", risk_pct=0.03),
 }
 
 exchange = ccxt.bybit({"enableRateLimit": True, "options": {"defaultType": "swap", "fetchMarkets": ["linear"]}})
@@ -83,9 +80,6 @@ def check_at(ohlcv, i, cfg):
         return None
     if abs(c - o) / rng < MIN_BODY_TO_RANGE:
         return None
-    lower_wick = (min(o, c) - l) / rng
-    if lower_wick > cfg["max_wick"]:
-        return None
     vol_ma = sum(x[5] for x in ohlcv[i - 20:i]) / 20
     if v < vol_ma * cfg["vol_ratio"]:
         return None
@@ -93,21 +87,16 @@ def check_at(ohlcv, i, cfg):
         return None
     atr = calc_atr(ohlcv, i)
     entry = c
-
-    # --- STOP ---
     raw_stop = h + (atr * cfg["stop_atr"] if atr else h * 0.005)
     if cfg["mode"] == "cap":
         stop = min(raw_stop, entry * (1 + cfg["max_stop_pct"]))
     else:
         stop = raw_stop
-        # skip if structural stop too wide for comfort
         if (stop - entry) / entry > cfg["max_stop_pct"]:
             return None
-
     risk = stop - entry
     if risk <= 0 or risk / entry < 0.002:
         return None
-
     return {
         "ts": last[0], "entry": entry, "stop": stop,
         "tp1": entry - risk * TP1_RR, "tp2": entry - risk * TP2_RR,
@@ -171,7 +160,7 @@ def fetch_ohlcv_full(symbol, need):
 
 def run_variant(name, cfg, by_sym):
     raw = []
-    onebar_stops = 0
+    onebar = 0
     risk_pcts = []
     for symbol, ohlcv in by_sym.items():
         if len(ohlcv) < 100:
@@ -189,13 +178,9 @@ def run_variant(name, cfg, by_sym):
             if res in ("STOP", "TP1->STOP"):
                 stop_ban = i + STOP_COOLDOWN
                 if bars == 1:
-                    onebar_stops += 1
-            raw.append({
-                "ts_ms": sig["ts"], "symbol": symbol.split("/")[0],
-                "body": round(sig["body"], 2), "result": res, "bars": bars, "r": r,
-                "stop_pct": round(sig["risk_pct_px"], 2),
-            })
-    raw.sort(key=lambda x: (x["ts_ms"], x["symbol"]))
+                    onebar += 1
+            raw.append({"ts_ms": sig["ts"], "result": res, "bars": bars, "r": r})
+    raw.sort(key=lambda x: x["ts_ms"])
     stats = defaultdict(int)
     for s in raw:
         stats[s["result"]] += 1
@@ -203,45 +188,47 @@ def run_variant(name, cfg, by_sym):
         stats["sum_R"] += s["r"]
     capital = peak = START_CAPITAL
     max_dd = 0.0
-    risk_pct = cfg["risk_pct"]  # $ risk always fixed
+    rp = cfg["risk_pct"]
     for s in raw:
-        capital += capital * risk_pct * s["r"]
+        capital += capital * rp * s["r"]
         peak = max(peak, capital)
         max_dd = max(max_dd, (peak - capital) / peak * 100 if peak else 0)
     total = stats["TOTAL"]
     wins = stats["TP2"] + stats["TP1+TP2"] + stats["TP1"]
     losses = stats["STOP"] + stats["TP1->STOP"]
     avg_stop = sum(risk_pcts) / len(risk_pcts) if risk_pcts else 0
-    lines = []
-    lines.append("=" * 64)
-    lines.append(f"SUMMARY | DUMP {name}")
-    lines.append(
-        f"mode={cfg['mode']} stop_atr={cfg['stop_atr']} max_stop={cfg['max_stop_pct']*100:.0f}% "
-        f"wick={cfg['max_wick']} | avg_stop_dist={avg_stop:.2f}%"
-    )
-    lines.append("=" * 64)
+    lines = [
+        "=" * 64,
+        f"SUMMARY | DUMP {name}",
+        f"mode={cfg['mode']} atr={cfg['stop_atr']} max_stop={cfg['max_stop_pct']*100:.0f}% "
+        f"$risk={rp*100:.0f}% | avg_stop={avg_stop:.2f}%",
+        "=" * 64,
+    ]
     if total == 0:
         lines.append("Сигналов нет")
         return lines
-    lines.append(f"Всего: {total}")
-    lines.append(f"Wins:  {wins} ({wins/total*100:.1f}%)")
-    lines.append(f"BE:    {stats['TP1->BE']}")
-    lines.append(f"STOP:  {losses} ({losses/total*100:.1f}%)  | 1-bar STOP: {onebar_stops}")
-    lines.append(f"OPEN:  {stats['OPEN']}")
+    lines += [
+        f"Всего: {total}",
+        f"Wins:  {wins} ({wins/total*100:.1f}%)",
+        f"BE:    {stats['TP1->BE']}",
+        f"STOP:  {losses} ({losses/total*100:.1f}%)  | 1-bar STOP: {onebar}",
+        f"OPEN:  {stats['OPEN']}",
+    ]
     for r in ["TP2", "TP1+TP2", "TP1", "TP1->BE", "TP1->STOP", "STOP", "OPEN"]:
         if stats[r]:
             lines.append(f"  {r}: {stats[r]}")
-    lines.append("")
-    lines.append(f"Start ${START_CAPITAL:.2f} → Final ${capital:.2f} ({(capital/START_CAPITAL-1)*100:+.1f}%)")
-    lines.append(f"Total R {stats['sum_R']:+.1f} | Avg {stats['sum_R']/total:+.2f}R | MaxDD {max_dd:.1f}%")
-    lines.append("")
+    lines += [
+        "",
+        f"Start ${START_CAPITAL:.2f} → Final ${capital:.2f} ({(capital/START_CAPITAL-1)*100:+.1f}%)",
+        f"Total R {stats['sum_R']:+.1f} | Avg {stats['sum_R']/total:+.2f}R | MaxDD {max_dd:.1f}%",
+        "",
+    ]
     return lines
 
 
 def main():
     print("=" * 64)
-    print("DUMP STRUCT-STOP LAB | 6 variants | 60d | top-150")
-    print("cap = old 2% ceiling | struct = high+ATR, $ risk fixed")
+    print("DUMP max_stop sweep | 60d | top-150")
     print("=" * 64)
     symbols = top_symbols()
     by_sym = {}
@@ -257,9 +244,8 @@ def main():
         time.sleep(SLEEP)
     print(f"\nЗагружено: {len(by_sym)}\n")
     all_lines = [
-        f"DUMP STRUCT-STOP | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
-        f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)}",
-        "",
+        f"DUMP max_stop sweep | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
+        f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)}", "",
     ]
     for name, cfg in VARIANTS.items():
         print(f">>> {name}")
@@ -272,7 +258,7 @@ def main():
     out = root / "backtests"
     out.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-    path = out / f"bt_DUMP_STRUCT_{stamp}.txt"
+    path = out / f"bt_DUMP_SWEEP_{stamp}.txt"
     latest = out / "latest_dump.txt"
     text = "\n".join(all_lines) + "\n"
     path.write_text(text, encoding="utf-8")
