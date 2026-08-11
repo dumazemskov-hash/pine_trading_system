@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RAID / DUMP Control Panel — две стратегии рядом."""
+"""RAID / DUMP Control Panel — две стратегии рядом + paper."""
 
 import os, sys, subprocess, threading, queue, shutil
 from datetime import datetime
@@ -12,11 +12,13 @@ SCANNER_DIR = ROOT / "scanner"
 SIGNALS_DIR = ROOT / "signals"
 SIGNALS_DUMP_DIR = ROOT / "signals_dump"
 BACKTESTS_DIR = ROOT / "backtests"
+PAPER_DIR = ROOT / "paper"
 RAID_SCRIPT = SCANNER_DIR / "v8.32-exp.py"
 DUMP_SCRIPT = SCANNER_DIR / "dump_scanner.py"
 RAID_BT = SCANNER_DIR / "backtest.py"
 DUMP_BT = SCANNER_DIR / "backtest_dump.py"
 CHECK_SCRIPT = SCANNER_DIR / "check_signals.py"
+PAPER_SCRIPT = SCANNER_DIR / "paper_engine.py"
 if not RAID_SCRIPT.exists():
     RAID_SCRIPT = SCANNER_DIR / "scanner.py"
 
@@ -31,7 +33,7 @@ class ControlPanel(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("RAID / DUMP — Control Panel")
-        self.geometry("920x640")
+        self.geometry("920x680")
         self.minsize(720, 520)
         self.configure(bg="#1e1e1e")
         self.raid_proc = None
@@ -93,6 +95,8 @@ class ControlPanel(tk.Tk):
             ("Push all", self.cmd_push_all),
             ("Обновить статус", self.cmd_refresh),
             ("Открыть signals", self.cmd_open_raid_signals),
+            ("📄 Paper equity", self.cmd_paper),
+            ("Последний Paper", self.cmd_show_paper),
         ]:
             ttk.Button(shared, text=text, command=cmd).pack(side="left", padx=4)
 
@@ -229,6 +233,25 @@ class ControlPanel(tk.Tk):
             self._run_cmd([sys.executable, "-u", str(CHECK_SCRIPT)], cwd=str(SCANNER_DIR))
         self._run_async(job)
 
+    def cmd_paper(self):
+        def job():
+            if not PAPER_SCRIPT.exists():
+                self._log("paper_engine.py нет — git pull"); return
+            self._log("--- Paper engine ---")
+            try:
+                p = subprocess.Popen([sys.executable, "-u", str(PAPER_SCRIPT)], cwd=str(SCANNER_DIR),
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                    encoding="utf-8", errors="replace", bufsize=1, env=self._env())
+                for line in p.stdout:
+                    if line.rstrip(): self._log(line.rstrip())
+                self._log("Paper OK" if p.wait() == 0 else "Paper fail")
+            except Exception as e:
+                self._log(f"Paper error: {e}")
+        self._run_async(job)
+
+    def cmd_show_paper(self):
+        self._show_file(PAPER_DIR / "latest.txt")
+
     def cmd_push_raid_logs(self):
         def job():
             SIGNALS_DIR.mkdir(exist_ok=True)
@@ -276,9 +299,11 @@ class ControlPanel(tk.Tk):
 
     def cmd_push_all(self):
         def job():
-            BACKTESTS_DIR.mkdir(exist_ok=True); SIGNALS_DUMP_DIR.mkdir(exist_ok=True)
+            BACKTESTS_DIR.mkdir(exist_ok=True)
+            SIGNALS_DUMP_DIR.mkdir(exist_ok=True)
+            PAPER_DIR.mkdir(exist_ok=True)
             self._run_cmd(["git", "add", "-A"])
-            self._run_cmd(["git", "add", "-f", "--", "backtests", "signals", "signals_dump"])
+            self._run_cmd(["git", "add", "-f", "--", "backtests", "signals", "signals_dump", "paper"])
             r = subprocess.run([find_git(), "status", "--porcelain"],
                 cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", env=self._env())
             dirty = (r.stdout or "").strip()
