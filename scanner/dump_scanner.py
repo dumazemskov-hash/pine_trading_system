@@ -9,7 +9,6 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 # === DUMP-after-PUMP Scanner v0.2_strict ===
-# BT 60d: +31.6% | Avg +0.25R | MaxDD 16.8% | 62 sig
 TELEGRAM_TOKEN = "8821282524:AAG7OKFKdzks0qy2WdqBi4gU2dV62Isp90k"
 CHAT_ID = "401292001"
 
@@ -42,24 +41,42 @@ ROOT = Path(__file__).resolve().parent.parent
 SIGNALS_DIR = ROOT / "signals_dump"
 SIGNALS_DIR.mkdir(exist_ok=True)
 LOCK_PATH = ROOT / "scanner" / ".dump_scanner.lock"
+_lock_fd = None
 
 
 def acquire_lock():
-    """Один процесс DUMP. Если уже запущен — выход."""
+    """Строгий single-instance: O_EXCL. Старый lock >2ч — сносим."""
+    global _lock_fd
     if LOCK_PATH.exists():
-        try:
-            old_pid = int(LOCK_PATH.read_text().strip().split("\n")[0])
-            # Windows / Unix: check if pid alive is OS-specific; stale lock if > 6h
-            mtime = LOCK_PATH.stat().st_mtime
-            if time.time() - mtime < 6 * 3600:
-                print(f"DUMP уже запущен (lock pid={old_pid}). Выход.")
-                print("Если это старый лок: удали scanner/.dump_scanner.lock")
-                sys.exit(0)
-        except Exception:
-            pass
-    LOCK_PATH.write_text(f"{os.getpid()}\n{datetime.now(timezone.utc).isoformat()}\n")
+        age = time.time() - LOCK_PATH.stat().st_mtime
+        if age > 2 * 3600:
+            try:
+                LOCK_PATH.unlink()
+            except Exception:
+                pass
+        else:
+            try:
+                info = LOCK_PATH.read_text(encoding="utf-8", errors="replace").strip()
+            except Exception:
+                info = "?"
+            print(f"DUMP уже запущен.\nLock: {LOCK_PATH}\n{info}")
+            print("Останови другой DUMP или удали scanner\\.dump_scanner.lock")
+            sys.exit(0)
+    try:
+        _lock_fd = os.open(str(LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(_lock_fd, f"{os.getpid()}\n{datetime.now(timezone.utc).isoformat()}\n".encode())
+    except FileExistsError:
+        print("DUMP уже запущен (O_EXCL). Выход.")
+        sys.exit(0)
 
     def _clear():
+        global _lock_fd
+        try:
+            if _lock_fd is not None:
+                os.close(_lock_fd)
+                _lock_fd = None
+        except Exception:
+            pass
         try:
             if LOCK_PATH.exists():
                 LOCK_PATH.unlink()
@@ -69,7 +86,6 @@ def acquire_lock():
 
 
 def load_sent_from_disk():
-    """Подтянуть sid из jsonl за 3 дня — после рестарта не дублировать TG."""
     loaded = 0
     for d in range(0, 3):
         day = (datetime.now(timezone.utc) - timedelta(days=d)).strftime("%Y-%m-%d")
@@ -213,9 +229,10 @@ def main():
     load_sent_from_disk()
     symbols = get_symbols()
     while True:
-        # touch lock so it is not considered stale
         try:
-            LOCK_PATH.write_text(f"{os.getpid()}\n{datetime.now(timezone.utc).isoformat()}\n")
+            if _lock_fd is not None:
+                # keep mtime fresh without breaking exclusive create
+                os.utime(LOCK_PATH, None)
         except Exception:
             pass
         for symbol in symbols:
@@ -231,7 +248,6 @@ def main():
                 if last_ts is not None:
                     if (signal["bar_ts"] - last_ts) / (15 * 60 * 1000) < COOLDOWN_BARS:
                         continue
-                # mark BEFORE telegram so crash mid-send still dedups next time
                 sent_signals.add(sid)
                 last_signal_bar[symbol] = signal["bar_ts"]
                 log_signal(signal, signal["ohlcv_closed"], signal.get("atr"))
