@@ -3,7 +3,10 @@ import time
 import requests
 import json
 import os
-from datetime import datetime, timezone
+import sys
+import atexit
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 # === DUMP-after-PUMP Scanner v0.2_strict ===
 # BT 60d: +31.6% | Avg +0.25R | MaxDD 16.8% | 62 sig
@@ -35,8 +38,64 @@ exchange = ccxt.bybit({
 sent_signals = set()
 last_signal_bar = {}
 
-SIGNALS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "signals_dump")
-os.makedirs(SIGNALS_DIR, exist_ok=True)
+ROOT = Path(__file__).resolve().parent.parent
+SIGNALS_DIR = ROOT / "signals_dump"
+SIGNALS_DIR.mkdir(exist_ok=True)
+LOCK_PATH = ROOT / "scanner" / ".dump_scanner.lock"
+
+
+def acquire_lock():
+    """Один процесс DUMP. Если уже запущен — выход."""
+    if LOCK_PATH.exists():
+        try:
+            old_pid = int(LOCK_PATH.read_text().strip().split("\n")[0])
+            # Windows / Unix: check if pid alive is OS-specific; stale lock if > 6h
+            mtime = LOCK_PATH.stat().st_mtime
+            if time.time() - mtime < 6 * 3600:
+                print(f"DUMP уже запущен (lock pid={old_pid}). Выход.")
+                print("Если это старый лок: удали scanner/.dump_scanner.lock")
+                sys.exit(0)
+        except Exception:
+            pass
+    LOCK_PATH.write_text(f"{os.getpid()}\n{datetime.now(timezone.utc).isoformat()}\n")
+
+    def _clear():
+        try:
+            if LOCK_PATH.exists():
+                LOCK_PATH.unlink()
+        except Exception:
+            pass
+    atexit.register(_clear)
+
+
+def load_sent_from_disk():
+    """Подтянуть sid из jsonl за 3 дня — после рестарта не дублировать TG."""
+    loaded = 0
+    for d in range(0, 3):
+        day = (datetime.now(timezone.utc) - timedelta(days=d)).strftime("%Y-%m-%d")
+        path = SIGNALS_DIR / f"{day}.jsonl"
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                sym = rec.get("symbol")
+                bar_ts = rec.get("bar_ts")
+                if sym is None or bar_ts is None:
+                    continue
+                sid = f"{sym}_{bar_ts}"
+                sent_signals.add(sid)
+                prev = last_signal_bar.get(sym)
+                if prev is None or bar_ts > prev:
+                    last_signal_bar[sym] = bar_ts
+                loaded += 1
+    print(f"Дедуп с диска: {loaded} записей, unique sid={len(sent_signals)}")
 
 
 def send_telegram(message: str):
@@ -49,7 +108,7 @@ def send_telegram(message: str):
 
 def log_signal(signal, ohlcv, atr):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    path = os.path.join(SIGNALS_DIR, f"{today}.jsonl")
+    path = SIGNALS_DIR / f"{today}.jsonl"
     recent = [{
         "ts": c[0], "o": round(c[1], 8), "h": round(c[2], 8),
         "l": round(c[3], 8), "c": round(c[4], 8), "v": round(c[5], 4),
@@ -148,10 +207,17 @@ def check_signal(symbol, ohlcv_raw):
 
 
 def main():
+    acquire_lock()
     print(f"[{datetime.now().strftime('%H:%M:%S')}] === DUMP Scanner v0.2_strict ===")
     print(f"pump>={PUMP_MIN_BODY}%/{PUMP_LOOKBACK}b | body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | vol>={VOLUME_RATIO}x | risk {MAX_RISK_PCT*100:.0f}%")
+    load_sent_from_disk()
     symbols = get_symbols()
     while True:
+        # touch lock so it is not considered stale
+        try:
+            LOCK_PATH.write_text(f"{os.getpid()}\n{datetime.now(timezone.utc).isoformat()}\n")
+        except Exception:
+            pass
         for symbol in symbols:
             try:
                 ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=90)
@@ -165,6 +231,7 @@ def main():
                 if last_ts is not None:
                     if (signal["bar_ts"] - last_ts) / (15 * 60 * 1000) < COOLDOWN_BARS:
                         continue
+                # mark BEFORE telegram so crash mid-send still dedups next time
                 sent_signals.add(sid)
                 last_signal_bar[symbol] = signal["bar_ts"]
                 log_signal(signal, signal["ohlcv_closed"], signal.get("atr"))
