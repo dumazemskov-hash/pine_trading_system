@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-DUMP skip-inside-candle lab | body 6.5-9 vol>=3
-skip_mult: не входить если (high-entry)/entry > stop_pct * skip_mult
-  skip_mult=1.0 → стоп должен доставать до high
-  skip_mult=1.5 → стоп минимум на 2/3 пути к high
-  skip_mult=2.0 → мягче
+DUMP dynamic-stop + OOS lab
+Входы: body 6.5-9% vol>=3x pump>=8% (v0.2b entry, не трогаем)
+Стоп: fixed / ATR / struct(high+ATR) / hybrid
+Метрики: FULL + IS (первые 2/3) + OOS (последняя 1/3) — не подгоняем под один кусок.
 """
 
 import ccxt, time
@@ -13,7 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 
 TIMEFRAME = "15m"
-LOOKBACK_DAYS = 60
+LOOKBACK_DAYS = 90
 MAX_SYMBOLS = 150
 BARS_LIMIT = 96 * LOOKBACK_DAYS + 80
 SLEEP = 0.10
@@ -24,22 +23,26 @@ START_CAPITAL = 300.0
 BE_AFTER_TP1 = True
 COOLDOWN_PER_SYMBOL = 32
 STOP_COOLDOWN = 96
-STOP_ATR = 0.35
 TP1_RR, TP2_RR = 1.6, 3.0
+IS_FRAC = 2.0 / 3.0  # in-sample = first 2/3 of each series
 
 ENTRY = dict(pump_lb=6, pump_min=8.0, min_body=6.5, max_body=9.0, vol_ratio=3.0, risk_pct=0.02)
 
+# stop_mode:
+#   fixed   — entry * (1 + stop_pct)
+#   atr     — entry + ATR * atr_mult, cap max_stop_pct
+#   struct  — high + ATR * atr_mult, cap max_stop_pct (стоп за high)
+#   hybrid  — max(entry*(1+min_pct), min(high+ATR*atr_mult, entry*(1+max_stop_pct)))
 VARIANTS = {
-    "base_s2_noskip":   {**ENTRY, "stop_pct": 0.02, "skip_mult": 99},
-    "base_s3_noskip":   {**ENTRY, "stop_pct": 0.03, "skip_mult": 99},
-    "s2_skip1.0":       {**ENTRY, "stop_pct": 0.02, "skip_mult": 1.0},
-    "s3_skip1.0":       {**ENTRY, "stop_pct": 0.03, "skip_mult": 1.0},
-    "s3_skip1.25":      {**ENTRY, "stop_pct": 0.03, "skip_mult": 1.25},
-    "s3_skip1.5":       {**ENTRY, "stop_pct": 0.03, "skip_mult": 1.5},
-    "s3_skip2.0":       {**ENTRY, "stop_pct": 0.03, "skip_mult": 2.0},
-    "s4_skip1.0":       {**ENTRY, "stop_pct": 0.04, "skip_mult": 1.0},
-    "s4_skip1.5":       {**ENTRY, "stop_pct": 0.04, "skip_mult": 1.5},
-    "s5_skip1.0":       {**ENTRY, "stop_pct": 0.05, "skip_mult": 1.0},
+    "fixed_3":   {**ENTRY, "stop_mode": "fixed",  "stop_pct": 0.03, "atr_mult": 0.0,  "max_stop_pct": 0.03, "min_pct": 0.03},
+    "fixed_25":  {**ENTRY, "stop_mode": "fixed",  "stop_pct": 0.025,"atr_mult": 0.0,  "max_stop_pct": 0.025,"min_pct": 0.025},
+    "atr_10_c5": {**ENTRY, "stop_mode": "atr",    "stop_pct": 0.0,  "atr_mult": 1.0,  "max_stop_pct": 0.05, "min_pct": 0.0},
+    "atr_15_c5": {**ENTRY, "stop_mode": "atr",    "stop_pct": 0.0,  "atr_mult": 1.5,  "max_stop_pct": 0.05, "min_pct": 0.0},
+    "atr_10_c4": {**ENTRY, "stop_mode": "atr",    "stop_pct": 0.0,  "atr_mult": 1.0,  "max_stop_pct": 0.04, "min_pct": 0.0},
+    "struct_c5": {**ENTRY, "stop_mode": "struct", "stop_pct": 0.0,  "atr_mult": 0.35, "max_stop_pct": 0.05, "min_pct": 0.0},
+    "struct_c6": {**ENTRY, "stop_mode": "struct", "stop_pct": 0.0,  "atr_mult": 0.35, "max_stop_pct": 0.06, "min_pct": 0.0},
+    "hybrid_2_5":{**ENTRY, "stop_mode": "hybrid", "stop_pct": 0.0,  "atr_mult": 0.5,  "max_stop_pct": 0.05, "min_pct": 0.02},
+    "hybrid_25_5":{**ENTRY,"stop_mode": "hybrid", "stop_pct": 0.0,  "atr_mult": 0.5,  "max_stop_pct": 0.05, "min_pct": 0.025},
 }
 
 exchange = ccxt.bybit({"enableRateLimit": True, "options": {"defaultType": "swap", "fetchMarkets": ["linear"]}})
@@ -68,6 +71,36 @@ def had_pump(ohlcv, i, pump_lb, pump_min):
     return lo > 0 and (hi - lo) / lo * 100 >= pump_min
 
 
+def make_stop(entry, high, atr, cfg):
+    mode = cfg["stop_mode"]
+    max_s = entry * (1 + cfg["max_stop_pct"])
+    atr_v = atr if atr else entry * 0.01
+
+    if mode == "fixed":
+        stop = entry * (1 + cfg["stop_pct"])
+    elif mode == "atr":
+        stop = entry + atr_v * cfg["atr_mult"]
+        stop = min(stop, max_s)
+    elif mode == "struct":
+        stop = high + atr_v * cfg["atr_mult"]
+        if stop > max_s:
+            return None  # слишком широкий — skip trade
+    elif mode == "hybrid":
+        floor = entry * (1 + cfg["min_pct"])
+        struct = high + atr_v * cfg["atr_mult"]
+        stop = max(floor, min(struct, max_s))
+    else:
+        return None
+
+    if stop <= entry:
+        return None
+    if (stop - entry) / entry > cfg["max_stop_pct"] + 1e-9 and mode != "struct":
+        stop = max_s
+    if stop <= entry:
+        return None
+    return stop
+
+
 def check_at(ohlcv, i, cfg):
     if i < 70 or i >= len(ohlcv) - 1:
         return None
@@ -94,22 +127,18 @@ def check_at(ohlcv, i, cfg):
         return None
 
     entry = c
-    high_dist = (h - entry) / entry  # fraction
-    # skip if stop cannot cover enough of the candle
-    if high_dist > cfg["stop_pct"] * cfg["skip_mult"]:
-        return None
-
     atr = calc_atr(ohlcv, i)
-    raw_stop = h + (atr * STOP_ATR if atr else h * 0.005)
-    stop = min(raw_stop, entry * (1 + cfg["stop_pct"]))
+    stop = make_stop(entry, h, atr, cfg)
+    if stop is None:
+        return None
     risk = stop - entry
-    if risk <= 0:
+    if risk <= 0 or risk / entry < 0.005:
         return None
     return {
         "ts": last[0], "entry": entry, "stop": stop,
         "tp1": entry - risk * TP1_RR, "tp2": entry - risk * TP2_RR,
         "risk": risk, "body": body, "bar_index": i,
-        "high_dist_pct": high_dist * 100,
+        "stop_pct_px": risk / entry * 100,
     }
 
 
@@ -166,14 +195,49 @@ def fetch_ohlcv_full(symbol, need):
     return ohlcv[-need:]
 
 
-def run_variant(name, cfg, by_sym):
-    raw = []
+def summarize(raw, rp, label):
+    stats = defaultdict(int)
     onebar = 0
+    stops_pct = []
+    for s in raw:
+        stats[s["result"]] += 1
+        stats["TOTAL"] += 1
+        stats["sum_R"] += s["r"]
+        if s["result"] in ("STOP", "TP1->STOP") and s["bars"] == 1:
+            onebar += 1
+        stops_pct.append(s.get("stop_pct_px", 0))
+    total = stats["TOTAL"]
+    lines = [f"--- {label} ---"]
+    if total == 0:
+        lines.append("Сигналов нет")
+        return lines, 0.0, 0.0
+    wins = stats["TP2"] + stats["TP1+TP2"] + stats["TP1"]
+    losses = stats["STOP"] + stats["TP1->STOP"]
+    capital = peak = START_CAPITAL
+    max_dd = 0.0
+    for s in raw:
+        capital += capital * rp * s["r"]
+        peak = max(peak, capital)
+        max_dd = max(max_dd, (peak - capital) / peak * 100 if peak else 0)
+    avg_stop = sum(stops_pct) / len(stops_pct) if stops_pct else 0
+    onebar_pct = onebar / losses * 100 if losses else 0
+    lines += [
+        f"N={total}  WR={wins/total*100:.1f}%  1-bar={onebar}({onebar_pct:.0f}%)  avg_stop={avg_stop:.2f}%",
+        f"Final ${capital:.2f} ({(capital/START_CAPITAL-1)*100:+.1f}%)  "
+        f"AvgR {stats['sum_R']/total:+.2f}  MaxDD {max_dd:.1f}%",
+    ]
+    return lines, stats["sum_R"] / total, capital
+
+
+def run_variant(name, cfg, by_sym):
+    raw_all = []
     for symbol, ohlcv in by_sym.items():
-        if len(ohlcv) < 100:
+        if len(ohlcv) < 120:
             continue
+        n = len(ohlcv)
+        is_end = int(n * IS_FRAC)
         last_i, stop_ban = -999, -1
-        for i in range(70, len(ohlcv) - 8):
+        for i in range(70, n - 8):
             if i - last_i < COOLDOWN_PER_SYMBOL or i < stop_ban:
                 continue
             sig = check_at(ohlcv, i, cfg)
@@ -183,76 +247,60 @@ def run_variant(name, cfg, by_sym):
             last_i = i
             if res in ("STOP", "TP1->STOP"):
                 stop_ban = i + STOP_COOLDOWN
-                if bars == 1:
-                    onebar += 1
-            raw.append({"ts_ms": sig["ts"], "result": res, "bars": bars, "r": r})
-    raw.sort(key=lambda x: x["ts_ms"])
-    stats = defaultdict(int)
-    for s in raw:
-        stats[s["result"]] += 1
-        stats["TOTAL"] += 1
-        stats["sum_R"] += s["r"]
-    capital = peak = START_CAPITAL
-    max_dd = 0.0
-    rp = cfg["risk_pct"]
-    for s in raw:
-        capital += capital * rp * s["r"]
-        peak = max(peak, capital)
-        max_dd = max(max_dd, (peak - capital) / peak * 100 if peak else 0)
-    total = stats["TOTAL"]
-    wins = stats["TP2"] + stats["TP1+TP2"] + stats["TP1"]
-    losses = stats["STOP"] + stats["TP1->STOP"]
-    sm = cfg["skip_mult"]
-    sm_s = "off" if sm >= 50 else f"{sm:.2f}"
+            split = "IS" if i < is_end else "OOS"
+            raw_all.append({
+                "ts_ms": sig["ts"], "result": res, "bars": bars, "r": r,
+                "stop_pct_px": sig["stop_pct_px"], "split": split,
+            })
+    raw_all.sort(key=lambda x: x["ts_ms"])
+    raw_is = [x for x in raw_all if x["split"] == "IS"]
+    raw_oos = [x for x in raw_all if x["split"] == "OOS"]
+
+    mode = cfg["stop_mode"]
+    desc = f"mode={mode}"
+    if mode == "fixed":
+        desc += f" stop={cfg['stop_pct']*100:.1f}%"
+    elif mode == "atr":
+        desc += f" ATR×{cfg['atr_mult']} cap={cfg['max_stop_pct']*100:.0f}%"
+    elif mode == "struct":
+        desc += f" high+ATR×{cfg['atr_mult']} cap={cfg['max_stop_pct']*100:.0f}%"
+    else:
+        desc += f" floor={cfg['min_pct']*100:.1f}% ATR×{cfg['atr_mult']} cap={cfg['max_stop_pct']*100:.0f}%"
+
     lines = [
         "=" * 64,
         f"SUMMARY | DUMP {name}",
-        f"stop={cfg['stop_pct']*100:.1f}% skip_mult={sm_s} | body6.5-9 vol>=3x TP 1.6/3R",
+        f"{desc} | entry body6.5-9 vol>=3 | TP 1.6/3R | 90d IS/OOS",
         "=" * 64,
     ]
-    if total == 0:
-        lines.append("Сигналов нет")
-        return lines
-    onebar_pct = onebar / losses * 100 if losses else 0
-    lines += [
-        f"Всего: {total}",
-        f"Wins:  {wins} ({wins/total*100:.1f}%)",
-        f"BE:    {stats['TP1->BE']}",
-        f"STOP:  {losses} ({losses/total*100:.1f}%)  | 1-bar: {onebar} ({onebar_pct:.0f}%)",
-        f"OPEN:  {stats['OPEN']}",
-    ]
-    for r in ["TP2", "TP1+TP2", "TP1", "TP1->BE", "TP1->STOP", "STOP", "OPEN"]:
-        if stats[r]:
-            lines.append(f"  {r}: {stats[r]}")
-    lines += [
-        "",
-        f"Start ${START_CAPITAL:.2f} → Final ${capital:.2f} ({(capital/START_CAPITAL-1)*100:+.1f}%)",
-        f"Total R {stats['sum_R']:+.1f} | Avg {stats['sum_R']/total:+.2f}R | MaxDD {max_dd:.1f}%",
-        "",
-    ]
+    for label, chunk in [("FULL", raw_all), ("IS (first 2/3)", raw_is), ("OOS (last 1/3)", raw_oos)]:
+        part, _, _ = summarize(chunk, cfg["risk_pct"], label)
+        lines.extend(part)
+    lines.append("")
     return lines
 
 
 def main():
     print("=" * 64)
-    print("DUMP skip-inside-candle lab | 60d top-150")
+    print("DUMP dynamic-stop + OOS lab | 90d top-150")
+    print("IS = first 2/3 bars | OOS = last 1/3 | entry = v0.2b filters")
     print("=" * 64)
     symbols = top_symbols()
     by_sym = {}
     for idx, symbol in enumerate(symbols, 1):
         try:
-            ohlcv = fetch_ohlcv_full(symbol, min(BARS_LIMIT, 3000))
+            ohlcv = fetch_ohlcv_full(symbol, min(BARS_LIMIT, 4000))
         except Exception as e:
             print(f"[{idx}/{len(symbols)}] skip {symbol}: {e}")
             continue
-        if len(ohlcv) >= 100:
+        if len(ohlcv) >= 120:
             by_sym[symbol] = ohlcv
         print(f"[{idx}/{len(symbols)}] {symbol.split('/')[0]} bars={len(ohlcv) if symbol in by_sym else 0}")
         time.sleep(SLEEP)
     print(f"\nЗагружено: {len(by_sym)}\n")
     all_lines = [
-        f"DUMP skip-inside | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
-        f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)}",
+        f"DUMP dyn-stop OOS | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
+        f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)} | IS_FRAC={IS_FRAC:.2f}",
         "",
     ]
     for name, cfg in VARIANTS.items():
@@ -261,12 +309,11 @@ def main():
         for line in part:
             print(line)
         all_lines.extend(part)
-        all_lines.append("")
     root = Path(__file__).resolve().parent.parent
     out = root / "backtests"
     out.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-    path = out / f"bt_DUMP_SKIPINSIDE_{stamp}.txt"
+    path = out / f"bt_DUMP_DYNSTOP_{stamp}.txt"
     latest = out / "latest_dump.txt"
     text = "\n".join(all_lines) + "\n"
     path.write_text(text, encoding="utf-8")
