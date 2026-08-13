@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-DUMP tighten lab | 60d top-150
-v0.2 base vs body>=6.5% vs vol>=3x vs both.
-Стоп cap 2%, TP 1.6/3R, BE after TP1.
+DUMP stop×TP lab | entries: body 6.5-9% vol>=3x pump>=8%
+Меняем только ширину стопа (cap) и TP RR.
 """
 
 import ccxt, time
@@ -18,23 +17,25 @@ SLEEP = 0.10
 SWEEP_LOOKBACK = 10
 CLOSE_IN_RANGE_MAX = 0.35
 MIN_BODY_TO_RANGE = 0.50
-TP1_RR, TP2_RR = 1.6, 3.0
 START_CAPITAL = 300.0
 BE_AFTER_TP1 = True
 COOLDOWN_PER_SYMBOL = 32
 STOP_COOLDOWN = 96
 STOP_ATR = 0.35
-MAX_STOP_PCT = 0.02
 
-BASE = dict(pump_lb=6, pump_min=8.0, max_body=9.0, risk_pct=0.02)
+# fixed entry filters (best from tighten lab)
+ENTRY = dict(pump_lb=6, pump_min=8.0, min_body=6.5, max_body=9.0, vol_ratio=3.0, risk_pct=0.02)
 
 VARIANTS = {
-    "v02_base":     {**BASE, "min_body": 5.0, "vol_ratio": 2.5},
-    "body_65":      {**BASE, "min_body": 6.5, "vol_ratio": 2.5},
-    "vol_30":       {**BASE, "min_body": 5.0, "vol_ratio": 3.0},
-    "body65_vol30": {**BASE, "min_body": 6.5, "vol_ratio": 3.0},
-    "body70_vol30": {**BASE, "min_body": 7.0, "vol_ratio": 3.0},
-    "body65_vol35": {**BASE, "min_body": 6.5, "vol_ratio": 3.5},
+    # stop_pct, tp1_rr, tp2_rr
+    "s2.0_tp1.6_3":  {**ENTRY, "stop_pct": 0.020, "tp1_rr": 1.6, "tp2_rr": 3.0},
+    "s2.5_tp1.6_3":  {**ENTRY, "stop_pct": 0.025, "tp1_rr": 1.6, "tp2_rr": 3.0},
+    "s3.0_tp1.6_3":  {**ENTRY, "stop_pct": 0.030, "tp1_rr": 1.6, "tp2_rr": 3.0},
+    "s2.5_tp2_3.5":  {**ENTRY, "stop_pct": 0.025, "tp1_rr": 2.0, "tp2_rr": 3.5},
+    "s3.0_tp2_4":    {**ENTRY, "stop_pct": 0.030, "tp1_rr": 2.0, "tp2_rr": 4.0},
+    "s2.5_tp2_4":    {**ENTRY, "stop_pct": 0.025, "tp1_rr": 2.0, "tp2_rr": 4.0},
+    "s3.5_tp2_4":    {**ENTRY, "stop_pct": 0.035, "tp1_rr": 2.0, "tp2_rr": 4.0},
+    "s3.0_tp1.6_3.5":{**ENTRY, "stop_pct": 0.030, "tp1_rr": 1.6, "tp2_rr": 3.5},
 }
 
 exchange = ccxt.bybit({"enableRateLimit": True, "options": {"defaultType": "swap", "fetchMarkets": ["linear"]}})
@@ -90,20 +91,23 @@ def check_at(ohlcv, i, cfg):
     atr = calc_atr(ohlcv, i)
     entry = c
     raw_stop = h + (atr * STOP_ATR if atr else h * 0.005)
-    stop = min(raw_stop, entry * (1 + MAX_STOP_PCT))
+    stop = min(raw_stop, entry * (1 + cfg["stop_pct"]))
     risk = stop - entry
     if risk <= 0:
         return None
     return {
         "ts": last[0], "entry": entry, "stop": stop,
-        "tp1": entry - risk * TP1_RR, "tp2": entry - risk * TP2_RR,
+        "tp1": entry - risk * cfg["tp1_rr"],
+        "tp2": entry - risk * cfg["tp2_rr"],
         "risk": risk, "body": body, "bar_index": i,
+        "tp1_rr": cfg["tp1_rr"], "tp2_rr": cfg["tp2_rr"],
     }
 
 
 def outcome(ohlcv, sig):
     i = sig["bar_index"]
     entry, stop, tp1, tp2 = sig["entry"], sig["stop"], sig["tp1"], sig["tp2"]
+    tp1_rr, tp2_rr = sig["tp1_rr"], sig["tp2_rr"]
     tp1_hit = False
     for j in range(i + 1, len(ohlcv)):
         high, low = ohlcv[j][2], ohlcv[j][3]
@@ -111,16 +115,16 @@ def outcome(ohlcv, sig):
         eff = entry if (tp1_hit and BE_AFTER_TP1) else stop
         if high >= eff:
             if tp1_hit and BE_AFTER_TP1:
-                return "TP1->BE", bars, TP1_RR * 0.5
+                return "TP1->BE", bars, tp1_rr * 0.5
             if tp1_hit:
-                return "TP1->STOP", bars, TP1_RR * 0.5 - 0.5
+                return "TP1->STOP", bars, tp1_rr * 0.5 - 0.5
             return "STOP", bars, -1.0
         if low <= tp2:
-            return ("TP1+TP2", bars, (TP1_RR + TP2_RR) / 2) if tp1_hit else ("TP2", bars, TP2_RR)
+            return ("TP1+TP2", bars, (tp1_rr + tp2_rr) / 2) if tp1_hit else ("TP2", bars, tp2_rr)
         if low <= tp1:
             tp1_hit = True
     if tp1_hit:
-        return "TP1", len(ohlcv) - i - 1, TP1_RR
+        return "TP1", len(ohlcv) - i - 1, tp1_rr
     return "OPEN", len(ohlcv) - i - 1, 0.0
 
 
@@ -173,7 +177,7 @@ def run_variant(name, cfg, by_sym):
                 stop_ban = i + STOP_COOLDOWN
                 if bars == 1:
                     onebar += 1
-            raw.append({"ts_ms": sig["ts"], "result": res, "bars": bars, "r": r, "body": sig["body"]})
+            raw.append({"ts_ms": sig["ts"], "result": res, "bars": bars, "r": r})
     raw.sort(key=lambda x: x["ts_ms"])
     stats = defaultdict(int)
     for s in raw:
@@ -193,7 +197,7 @@ def run_variant(name, cfg, by_sym):
     lines = [
         "=" * 64,
         f"SUMMARY | DUMP {name}",
-        f"body {cfg['min_body']}-{cfg['max_body']}% vol>={cfg['vol_ratio']}x pump>={cfg['pump_min']}% | stop 2% TP 1.6/3R",
+        f"stop={cfg['stop_pct']*100:.1f}% TP={cfg['tp1_rr']}/{cfg['tp2_rr']}R | body6.5-9 vol>=3x",
         "=" * 64,
     ]
     if total == 0:
@@ -204,7 +208,7 @@ def run_variant(name, cfg, by_sym):
         f"Всего: {total}",
         f"Wins:  {wins} ({wins/total*100:.1f}%)",
         f"BE:    {stats['TP1->BE']}",
-        f"STOP:  {losses} ({losses/total*100:.1f}%)  | 1-bar STOP: {onebar} ({onebar_pct:.0f}% of stops)",
+        f"STOP:  {losses} ({losses/total*100:.1f}%)  | 1-bar: {onebar} ({onebar_pct:.0f}%)",
         f"OPEN:  {stats['OPEN']}",
     ]
     for r in ["TP2", "TP1+TP2", "TP1", "TP1->BE", "TP1->STOP", "STOP", "OPEN"]:
@@ -221,7 +225,7 @@ def run_variant(name, cfg, by_sym):
 
 def main():
     print("=" * 64)
-    print("DUMP tighten lab | body/vol | 60d top-150")
+    print("DUMP stop×TP lab | body65 vol30 entries | 60d top-150")
     print("=" * 64)
     symbols = top_symbols()
     by_sym = {}
@@ -237,8 +241,9 @@ def main():
         time.sleep(SLEEP)
     print(f"\nЗагружено: {len(by_sym)}\n")
     all_lines = [
-        f"DUMP tighten | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
-        f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)}", "",
+        f"DUMP stop×TP | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
+        f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)} | entry body6.5-9 vol>=3",
+        "",
     ]
     for name, cfg in VARIANTS.items():
         print(f">>> {name}")
@@ -251,7 +256,7 @@ def main():
     out = root / "backtests"
     out.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-    path = out / f"bt_DUMP_TIGHTEN_{stamp}.txt"
+    path = out / f"bt_DUMP_STOPTP_{stamp}.txt"
     latest = out / "latest_dump.txt"
     text = "\n".join(all_lines) + "\n"
     path.write_text(text, encoding="utf-8")
