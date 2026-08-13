@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-DUMP lab | structural stop + fixed % TP | 60d top-150
-Стоп = high + ATR*k (всегда над high).
-TP1/TP2 = entry * (1 - pct), не R-multiple.
-$ risk фиксирован → размер позиции = risk$ / (stop-entry).
+DUMP tighten lab | 60d top-150
+v0.2 base vs body>=6.5% vs vol>=3x vs both.
+Стоп cap 2%, TP 1.6/3R, BE after TP1.
 """
 
 import ccxt, time
@@ -19,45 +18,23 @@ SLEEP = 0.10
 SWEEP_LOOKBACK = 10
 CLOSE_IN_RANGE_MAX = 0.35
 MIN_BODY_TO_RANGE = 0.50
+TP1_RR, TP2_RR = 1.6, 3.0
 START_CAPITAL = 300.0
 BE_AFTER_TP1 = True
 COOLDOWN_PER_SYMBOL = 32
 STOP_COOLDOWN = 96
+STOP_ATR = 0.35
+MAX_STOP_PCT = 0.02
 
-BASE = dict(pump_lb=6, pump_min=8.0, min_body=5.0, max_body=9.0, vol_ratio=2.5, risk_pct=0.02)
+BASE = dict(pump_lb=6, pump_min=8.0, max_body=9.0, risk_pct=0.02)
 
-# mode:
-#   cap_r  = old: stop capped 2%, TP in R
-#   struct_pct = stop above high, TP in fixed %
 VARIANTS = {
-    "cap_R_base": {
-        **BASE, "mode": "cap_r", "stop_atr": 0.35, "max_stop_pct": 0.02,
-        "tp1_pct": None, "tp2_pct": None, "tp1_rr": 1.6, "tp2_rr": 3.0,
-    },
-    "s035_tp3_6": {
-        **BASE, "mode": "struct_pct", "stop_atr": 0.35, "max_stop_pct": 0.12,
-        "tp1_pct": 0.03, "tp2_pct": 0.06,
-    },
-    "s035_tp4_8": {
-        **BASE, "mode": "struct_pct", "stop_atr": 0.35, "max_stop_pct": 0.12,
-        "tp1_pct": 0.04, "tp2_pct": 0.08,
-    },
-    "s035_tp25_5": {
-        **BASE, "mode": "struct_pct", "stop_atr": 0.35, "max_stop_pct": 0.12,
-        "tp1_pct": 0.025, "tp2_pct": 0.05,
-    },
-    "s050_tp3_6": {
-        **BASE, "mode": "struct_pct", "stop_atr": 0.50, "max_stop_pct": 0.12,
-        "tp1_pct": 0.03, "tp2_pct": 0.06,
-    },
-    "s035_tp3_6_r3": {
-        **BASE, "mode": "struct_pct", "stop_atr": 0.35, "max_stop_pct": 0.12,
-        "tp1_pct": 0.03, "tp2_pct": 0.06, "risk_pct": 0.03,
-    },
-    "s035_tp3_6_m15": {
-        **BASE, "mode": "struct_pct", "stop_atr": 0.35, "max_stop_pct": 0.15,
-        "tp1_pct": 0.03, "tp2_pct": 0.06,
-    },
+    "v02_base":     {**BASE, "min_body": 5.0, "vol_ratio": 2.5},
+    "body_65":      {**BASE, "min_body": 6.5, "vol_ratio": 2.5},
+    "vol_30":       {**BASE, "min_body": 5.0, "vol_ratio": 3.0},
+    "body65_vol30": {**BASE, "min_body": 6.5, "vol_ratio": 3.0},
+    "body70_vol30": {**BASE, "min_body": 7.0, "vol_ratio": 3.0},
+    "body65_vol35": {**BASE, "min_body": 6.5, "vol_ratio": 3.5},
 }
 
 exchange = ccxt.bybit({"enableRateLimit": True, "options": {"defaultType": "swap", "fetchMarkets": ["linear"]}})
@@ -110,89 +87,40 @@ def check_at(ohlcv, i, cfg):
         return None
     if l > min(x[3] for x in ohlcv[i - SWEEP_LOOKBACK + 1:i + 1]):
         return None
-
     atr = calc_atr(ohlcv, i)
     entry = c
-    raw_stop = h + (atr * cfg["stop_atr"] if atr else h * 0.005)
-
-    if cfg["mode"] == "cap_r":
-        stop = min(raw_stop, entry * (1 + cfg["max_stop_pct"]))
-        risk = stop - entry
-        if risk <= 0:
-            return None
-        tp1 = entry - risk * cfg["tp1_rr"]
-        tp2 = entry - risk * cfg["tp2_rr"]
-        # nominal R for equity = 1.0 at full stop; wins scale by rr
-        r_stop = 1.0
-    else:
-        # structural: always above high
-        stop = raw_stop
-        if (stop - entry) / entry > cfg["max_stop_pct"]:
-            return None
-        risk = stop - entry
-        if risk <= 0 or risk / entry < 0.002:
-            return None
-        tp1 = entry * (1 - cfg["tp1_pct"])
-        tp2 = entry * (1 - cfg["tp2_pct"])
-        # R units relative to stop distance (for equity curve)
-        r_stop = 1.0
-
+    raw_stop = h + (atr * STOP_ATR if atr else h * 0.005)
+    stop = min(raw_stop, entry * (1 + MAX_STOP_PCT))
+    risk = stop - entry
+    if risk <= 0:
+        return None
     return {
         "ts": last[0], "entry": entry, "stop": stop,
-        "tp1": tp1, "tp2": tp2, "risk": risk,
-        "risk_pct_px": risk / entry * 100,
-        "body": body, "bar_index": i, "mode": cfg["mode"],
-        "tp1_pct": cfg.get("tp1_pct"), "tp2_pct": cfg.get("tp2_pct"),
-        "tp1_rr": cfg.get("tp1_rr"), "tp2_rr": cfg.get("tp2_rr"),
+        "tp1": entry - risk * TP1_RR, "tp2": entry - risk * TP2_RR,
+        "risk": risk, "body": body, "bar_index": i,
     }
 
 
 def outcome(ohlcv, sig):
     i = sig["bar_index"]
     entry, stop, tp1, tp2 = sig["entry"], sig["stop"], sig["tp1"], sig["tp2"]
-    risk = sig["risk"]
-    mode = sig["mode"]
     tp1_hit = False
-
     for j in range(i + 1, len(ohlcv)):
         high, low = ohlcv[j][2], ohlcv[j][3]
         bars = j - i
         eff = entry if (tp1_hit and BE_AFTER_TP1) else stop
-
         if high >= eff:
             if tp1_hit and BE_AFTER_TP1:
-                # partial: TP1 profit locked in R
-                if mode == "cap_r":
-                    return "TP1->BE", bars, sig["tp1_rr"] * 0.5
-                # fixed pct: pnl at TP1 / risk
-                r = (entry - tp1) / risk * 0.5  # half after BE assumption ~ TP1 then flat
-                return "TP1->BE", bars, r
+                return "TP1->BE", bars, TP1_RR * 0.5
             if tp1_hit:
-                if mode == "cap_r":
-                    return "TP1->STOP", bars, sig["tp1_rr"] * 0.5 - 0.5
-                r = ((entry - tp1) / risk) * 0.5 - 0.5
-                return "TP1->STOP", bars, r
+                return "TP1->STOP", bars, TP1_RR * 0.5 - 0.5
             return "STOP", bars, -1.0
-
         if low <= tp2:
-            if mode == "cap_r":
-                if tp1_hit:
-                    return "TP1+TP2", bars, (sig["tp1_rr"] + sig["tp2_rr"]) / 2
-                return "TP2", bars, sig["tp2_rr"]
-            # fixed %: full move to tp2 in R of stop
-            r_full = (entry - tp2) / risk
-            if tp1_hit:
-                r_tp1 = (entry - tp1) / risk
-                return "TP1+TP2", bars, (r_tp1 + r_full) / 2
-            return "TP2", bars, r_full
-
+            return ("TP1+TP2", bars, (TP1_RR + TP2_RR) / 2) if tp1_hit else ("TP2", bars, TP2_RR)
         if low <= tp1:
             tp1_hit = True
-
     if tp1_hit:
-        if mode == "cap_r":
-            return "TP1", len(ohlcv) - i - 1, sig["tp1_rr"]
-        return "TP1", len(ohlcv) - i - 1, (entry - tp1) / risk
+        return "TP1", len(ohlcv) - i - 1, TP1_RR
     return "OPEN", len(ohlcv) - i - 1, 0.0
 
 
@@ -229,7 +157,6 @@ def fetch_ohlcv_full(symbol, need):
 def run_variant(name, cfg, by_sym):
     raw = []
     onebar = 0
-    risk_pcts = []
     for symbol, ohlcv in by_sym.items():
         if len(ohlcv) < 100:
             continue
@@ -242,12 +169,11 @@ def run_variant(name, cfg, by_sym):
                 continue
             res, bars, r = outcome(ohlcv, sig)
             last_i = i
-            risk_pcts.append(sig["risk_pct_px"])
             if res in ("STOP", "TP1->STOP"):
                 stop_ban = i + STOP_COOLDOWN
                 if bars == 1:
                     onebar += 1
-            raw.append({"ts_ms": sig["ts"], "result": res, "bars": bars, "r": r})
+            raw.append({"ts_ms": sig["ts"], "result": res, "bars": bars, "r": r, "body": sig["body"]})
     raw.sort(key=lambda x: x["ts_ms"])
     stats = defaultdict(int)
     for s in raw:
@@ -264,26 +190,21 @@ def run_variant(name, cfg, by_sym):
     total = stats["TOTAL"]
     wins = stats["TP2"] + stats["TP1+TP2"] + stats["TP1"]
     losses = stats["STOP"] + stats["TP1->STOP"]
-    avg_stop = sum(risk_pcts) / len(risk_pcts) if risk_pcts else 0
-    if cfg["mode"] == "cap_r":
-        desc = f"cap_R stop=2% TP={cfg['tp1_rr']}/{cfg['tp2_rr']}R"
-    else:
-        desc = (f"struct atr={cfg['stop_atr']} max={cfg['max_stop_pct']*100:.0f}% "
-                f"TP={cfg['tp1_pct']*100:.1f}/{cfg['tp2_pct']*100:.1f}%")
     lines = [
         "=" * 64,
         f"SUMMARY | DUMP {name}",
-        f"{desc} | $risk={rp*100:.0f}% | avg_stop={avg_stop:.2f}%",
+        f"body {cfg['min_body']}-{cfg['max_body']}% vol>={cfg['vol_ratio']}x pump>={cfg['pump_min']}% | stop 2% TP 1.6/3R",
         "=" * 64,
     ]
     if total == 0:
         lines.append("Сигналов нет")
         return lines
+    onebar_pct = onebar / losses * 100 if losses else 0
     lines += [
         f"Всего: {total}",
         f"Wins:  {wins} ({wins/total*100:.1f}%)",
         f"BE:    {stats['TP1->BE']}",
-        f"STOP:  {losses} ({losses/total*100:.1f}%)  | 1-bar STOP: {onebar}",
+        f"STOP:  {losses} ({losses/total*100:.1f}%)  | 1-bar STOP: {onebar} ({onebar_pct:.0f}% of stops)",
         f"OPEN:  {stats['OPEN']}",
     ]
     for r in ["TP2", "TP1+TP2", "TP1", "TP1->BE", "TP1->STOP", "STOP", "OPEN"]:
@@ -300,7 +221,7 @@ def run_variant(name, cfg, by_sym):
 
 def main():
     print("=" * 64)
-    print("DUMP struct+fixed%TP lab | 60d | top-150")
+    print("DUMP tighten lab | body/vol | 60d top-150")
     print("=" * 64)
     symbols = top_symbols()
     by_sym = {}
@@ -316,7 +237,7 @@ def main():
         time.sleep(SLEEP)
     print(f"\nЗагружено: {len(by_sym)}\n")
     all_lines = [
-        f"DUMP struct+pctTP | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
+        f"DUMP tighten | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
         f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)}", "",
     ]
     for name, cfg in VARIANTS.items():
@@ -330,7 +251,7 @@ def main():
     out = root / "backtests"
     out.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-    path = out / f"bt_DUMP_PCTTP_{stamp}.txt"
+    path = out / f"bt_DUMP_TIGHTEN_{stamp}.txt"
     latest = out / "latest_dump.txt"
     text = "\n".join(all_lines) + "\n"
     path.write_text(text, encoding="utf-8")
