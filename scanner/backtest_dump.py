@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-DUMP stop×TP lab | entries: body 6.5-9% vol>=3x pump>=8%
-Меняем только ширину стопа (cap) и TP RR.
+DUMP skip-inside-candle lab | body 6.5-9 vol>=3
+skip_mult: не входить если (high-entry)/entry > stop_pct * skip_mult
+  skip_mult=1.0 → стоп должен доставать до high
+  skip_mult=1.5 → стоп минимум на 2/3 пути к high
+  skip_mult=2.0 → мягче
 """
 
 import ccxt, time
@@ -22,20 +25,21 @@ BE_AFTER_TP1 = True
 COOLDOWN_PER_SYMBOL = 32
 STOP_COOLDOWN = 96
 STOP_ATR = 0.35
+TP1_RR, TP2_RR = 1.6, 3.0
 
-# fixed entry filters (best from tighten lab)
 ENTRY = dict(pump_lb=6, pump_min=8.0, min_body=6.5, max_body=9.0, vol_ratio=3.0, risk_pct=0.02)
 
 VARIANTS = {
-    # stop_pct, tp1_rr, tp2_rr
-    "s2.0_tp1.6_3":  {**ENTRY, "stop_pct": 0.020, "tp1_rr": 1.6, "tp2_rr": 3.0},
-    "s2.5_tp1.6_3":  {**ENTRY, "stop_pct": 0.025, "tp1_rr": 1.6, "tp2_rr": 3.0},
-    "s3.0_tp1.6_3":  {**ENTRY, "stop_pct": 0.030, "tp1_rr": 1.6, "tp2_rr": 3.0},
-    "s2.5_tp2_3.5":  {**ENTRY, "stop_pct": 0.025, "tp1_rr": 2.0, "tp2_rr": 3.5},
-    "s3.0_tp2_4":    {**ENTRY, "stop_pct": 0.030, "tp1_rr": 2.0, "tp2_rr": 4.0},
-    "s2.5_tp2_4":    {**ENTRY, "stop_pct": 0.025, "tp1_rr": 2.0, "tp2_rr": 4.0},
-    "s3.5_tp2_4":    {**ENTRY, "stop_pct": 0.035, "tp1_rr": 2.0, "tp2_rr": 4.0},
-    "s3.0_tp1.6_3.5":{**ENTRY, "stop_pct": 0.030, "tp1_rr": 1.6, "tp2_rr": 3.5},
+    "base_s2_noskip":   {**ENTRY, "stop_pct": 0.02, "skip_mult": 99},
+    "base_s3_noskip":   {**ENTRY, "stop_pct": 0.03, "skip_mult": 99},
+    "s2_skip1.0":       {**ENTRY, "stop_pct": 0.02, "skip_mult": 1.0},
+    "s3_skip1.0":       {**ENTRY, "stop_pct": 0.03, "skip_mult": 1.0},
+    "s3_skip1.25":      {**ENTRY, "stop_pct": 0.03, "skip_mult": 1.25},
+    "s3_skip1.5":       {**ENTRY, "stop_pct": 0.03, "skip_mult": 1.5},
+    "s3_skip2.0":       {**ENTRY, "stop_pct": 0.03, "skip_mult": 2.0},
+    "s4_skip1.0":       {**ENTRY, "stop_pct": 0.04, "skip_mult": 1.0},
+    "s4_skip1.5":       {**ENTRY, "stop_pct": 0.04, "skip_mult": 1.5},
+    "s5_skip1.0":       {**ENTRY, "stop_pct": 0.05, "skip_mult": 1.0},
 }
 
 exchange = ccxt.bybit({"enableRateLimit": True, "options": {"defaultType": "swap", "fetchMarkets": ["linear"]}})
@@ -88,8 +92,14 @@ def check_at(ohlcv, i, cfg):
         return None
     if l > min(x[3] for x in ohlcv[i - SWEEP_LOOKBACK + 1:i + 1]):
         return None
-    atr = calc_atr(ohlcv, i)
+
     entry = c
+    high_dist = (h - entry) / entry  # fraction
+    # skip if stop cannot cover enough of the candle
+    if high_dist > cfg["stop_pct"] * cfg["skip_mult"]:
+        return None
+
+    atr = calc_atr(ohlcv, i)
     raw_stop = h + (atr * STOP_ATR if atr else h * 0.005)
     stop = min(raw_stop, entry * (1 + cfg["stop_pct"]))
     risk = stop - entry
@@ -97,17 +107,15 @@ def check_at(ohlcv, i, cfg):
         return None
     return {
         "ts": last[0], "entry": entry, "stop": stop,
-        "tp1": entry - risk * cfg["tp1_rr"],
-        "tp2": entry - risk * cfg["tp2_rr"],
+        "tp1": entry - risk * TP1_RR, "tp2": entry - risk * TP2_RR,
         "risk": risk, "body": body, "bar_index": i,
-        "tp1_rr": cfg["tp1_rr"], "tp2_rr": cfg["tp2_rr"],
+        "high_dist_pct": high_dist * 100,
     }
 
 
 def outcome(ohlcv, sig):
     i = sig["bar_index"]
     entry, stop, tp1, tp2 = sig["entry"], sig["stop"], sig["tp1"], sig["tp2"]
-    tp1_rr, tp2_rr = sig["tp1_rr"], sig["tp2_rr"]
     tp1_hit = False
     for j in range(i + 1, len(ohlcv)):
         high, low = ohlcv[j][2], ohlcv[j][3]
@@ -115,16 +123,16 @@ def outcome(ohlcv, sig):
         eff = entry if (tp1_hit and BE_AFTER_TP1) else stop
         if high >= eff:
             if tp1_hit and BE_AFTER_TP1:
-                return "TP1->BE", bars, tp1_rr * 0.5
+                return "TP1->BE", bars, TP1_RR * 0.5
             if tp1_hit:
-                return "TP1->STOP", bars, tp1_rr * 0.5 - 0.5
+                return "TP1->STOP", bars, TP1_RR * 0.5 - 0.5
             return "STOP", bars, -1.0
         if low <= tp2:
-            return ("TP1+TP2", bars, (tp1_rr + tp2_rr) / 2) if tp1_hit else ("TP2", bars, tp2_rr)
+            return ("TP1+TP2", bars, (TP1_RR + TP2_RR) / 2) if tp1_hit else ("TP2", bars, TP2_RR)
         if low <= tp1:
             tp1_hit = True
     if tp1_hit:
-        return "TP1", len(ohlcv) - i - 1, tp1_rr
+        return "TP1", len(ohlcv) - i - 1, TP1_RR
     return "OPEN", len(ohlcv) - i - 1, 0.0
 
 
@@ -194,10 +202,12 @@ def run_variant(name, cfg, by_sym):
     total = stats["TOTAL"]
     wins = stats["TP2"] + stats["TP1+TP2"] + stats["TP1"]
     losses = stats["STOP"] + stats["TP1->STOP"]
+    sm = cfg["skip_mult"]
+    sm_s = "off" if sm >= 50 else f"{sm:.2f}"
     lines = [
         "=" * 64,
         f"SUMMARY | DUMP {name}",
-        f"stop={cfg['stop_pct']*100:.1f}% TP={cfg['tp1_rr']}/{cfg['tp2_rr']}R | body6.5-9 vol>=3x",
+        f"stop={cfg['stop_pct']*100:.1f}% skip_mult={sm_s} | body6.5-9 vol>=3x TP 1.6/3R",
         "=" * 64,
     ]
     if total == 0:
@@ -225,7 +235,7 @@ def run_variant(name, cfg, by_sym):
 
 def main():
     print("=" * 64)
-    print("DUMP stop×TP lab | body65 vol30 entries | 60d top-150")
+    print("DUMP skip-inside-candle lab | 60d top-150")
     print("=" * 64)
     symbols = top_symbols()
     by_sym = {}
@@ -241,8 +251,8 @@ def main():
         time.sleep(SLEEP)
     print(f"\nЗагружено: {len(by_sym)}\n")
     all_lines = [
-        f"DUMP stop×TP | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
-        f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)} | entry body6.5-9 vol>=3",
+        f"DUMP skip-inside | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
+        f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)}",
         "",
     ]
     for name, cfg in VARIANTS.items():
@@ -256,7 +266,7 @@ def main():
     out = root / "backtests"
     out.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-    path = out / f"bt_DUMP_STOPTP_{stamp}.txt"
+    path = out / f"bt_DUMP_SKIPINSIDE_{stamp}.txt"
     latest = out / "latest_dump.txt"
     text = "\n".join(all_lines) + "\n"
     path.write_text(text, encoding="utf-8")
