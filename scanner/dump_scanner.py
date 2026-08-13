@@ -8,26 +8,29 @@ import atexit
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-# === DUMP-after-PUMP Scanner v0.2_strict ===
+# === DUMP-after-PUMP Scanner v0.2b ===
+# Tighten lab + stop×TP lab:
+# body 6.5-9% | vol>=3x | stop 3% | TP 1.6/3R | risk 2%
+# BT60d body65_vol30 + s3.0: +37% Avg +0.53R MaxDD 9.6%
 TELEGRAM_TOKEN = "8821282524:AAG7OKFKdzks0qy2WdqBi4gU2dV62Isp90k"
 CHAT_ID = "401292001"
 
 TIMEFRAME = "15m"
-MIN_BODY_PCT = 5.0
+MIN_BODY_PCT = 6.5
 MAX_BODY_PCT = 9.0
 PUMP_LOOKBACK = 6
 PUMP_MIN_BODY = 8.0
 CLOSE_IN_RANGE_MAX = 0.35
 MIN_BODY_TO_RANGE = 0.50
-VOLUME_RATIO = 2.5
+VOLUME_RATIO = 3.0
 COOLDOWN_BARS = 32
-MAX_RISK_PCT = 0.02
+MAX_RISK_PCT = 0.03
 STOP_ATR_MULT = 0.35
 SWEEP_LOOKBACK = 10
 TP1_RR = 1.6
 TP2_RR = 3.0
 CANDLES_TO_LOG = 40
-VERSION = "dump-v0.2"
+VERSION = "dump-v0.2b"
 
 exchange = ccxt.bybit({
     "enableRateLimit": True,
@@ -45,7 +48,6 @@ _lock_fd = None
 
 
 def acquire_lock():
-    """Строгий single-instance: O_EXCL. Старый lock >2ч — сносим."""
     global _lock_fd
     if LOCK_PATH.exists():
         age = time.time() - LOCK_PATH.stat().st_mtime
@@ -224,14 +226,16 @@ def check_signal(symbol, ohlcv_raw):
 
 def main():
     acquire_lock()
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] === DUMP Scanner v0.2_strict ===")
-    print(f"pump>={PUMP_MIN_BODY}%/{PUMP_LOOKBACK}b | body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | vol>={VOLUME_RATIO}x | risk {MAX_RISK_PCT*100:.0f}%")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] === DUMP Scanner v0.2b ===")
+    print(
+        f"body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | vol>={VOLUME_RATIO}x | "
+        f"stop {MAX_RISK_PCT*100:.0f}% | TP {TP1_RR}/{TP2_RR}R | pump>={PUMP_MIN_BODY}%"
+    )
     load_sent_from_disk()
     symbols = get_symbols()
     while True:
         try:
             if _lock_fd is not None:
-                # keep mtime fresh without breaking exclusive create
                 os.utime(LOCK_PATH, None)
         except Exception:
             pass
@@ -253,13 +257,13 @@ def main():
                 log_signal(signal, signal["ohlcv_closed"], signal.get("atr"))
                 rp = signal["risk"] / signal["entry"] * 100
                 msg = (
-                    f"DUMP v0.2 | {symbol}\n"
+                    f"DUMP v0.2b | {symbol}\n"
                     f"Entry: {signal['entry']:.6f}\n"
                     f"Stop:  {signal['stop']:.6f}\n"
                     f"TP1:   {signal['tp1']:.6f} | TP2: {signal['tp2']:.6f}\n"
                     f"Risk:  {rp:.2f}%\n"
                     f"Body:  {signal['body_pct']:.2f}%\n"
-                    f"Mode:  dump-after-pump strict"
+                    f"Mode:  dump-after-pump v0.2b"
                 )
                 send_telegram(msg)
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] DUMP → {symbol} | body={signal['body_pct']:.1f}%")
