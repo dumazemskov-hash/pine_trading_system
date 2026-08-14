@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Paper Engine — виртуальная торговля по live-сигналам.
+Paper Engine — DUMP-only (основная стратегия v0.2b).
 
-Читает signals/*.jsonl + signals_dump/*.jsonl
-Считает позиции на истории 15m, equity с $300.
-RAID risk 4%, DUMP risk 2%, BE after TP1.
-Сохраняет paper/latest.txt и paper/state.json
+Читает только signals_dump/*.jsonl
+Приоритет equity: version dump-v0.2b
+Старые v0.2 (без b) — отдельно в отчёте, не в основной equity.
+Risk 2%, BE after TP1, start $300.
 
 Запуск: python scanner/paper_engine.py
 """
@@ -17,15 +17,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DIRS = [
-    (ROOT / "signals", "RAID", 0.04),
-    (ROOT / "signals_dump", "DUMP", 0.02),
-]
+SIGNALS_DIR = ROOT / "signals_dump"
 OUT_DIR = ROOT / "paper"
 START_CAPITAL = 300.0
+RISK_PCT = 0.02
 TP1_RR = 1.6
 TP2_RR = 3.0
 BE_AFTER_TP1 = True
+
+# основная линейка paper
+PRIMARY_VERSIONS = ("v0.2b", "dump-v0.2b")
 
 exchange = ccxt.bybit({
     "enableRateLimit": True,
@@ -33,40 +34,44 @@ exchange = ccxt.bybit({
 })
 
 
+def is_primary(ver: str) -> bool:
+    v = (ver or "").lower()
+    return any(p in v for p in PRIMARY_VERSIONS)
+
+
 def load_signals():
     by_key = {}
-    for folder, src, risk in DIRS:
-        if not folder.exists():
-            continue
-        for path in sorted(folder.glob("*.jsonl")):
-            with open(path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if "entry" not in rec or "symbol" not in rec:
-                        continue
-                    bar_ts = int(rec.get("bar_ts") or 0)
-                    key = (src, rec["symbol"], bar_ts)
-                    ver = str(rec.get("version", ""))
-                    score = ("v8.32" in ver or "v0.2" in ver, float(rec.get("risk_pct") or 0))
-                    prev = by_key.get(key)
-                    if prev is None or score > prev["_score"]:
-                        rec["_src"] = src
-                        rec["_risk"] = risk
-                        rec["_score"] = score
-                        by_key[key] = rec
+    if not SIGNALS_DIR.exists():
+        return []
+    for path in sorted(SIGNALS_DIR.glob("*.jsonl")):
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if "entry" not in rec or "symbol" not in rec:
+                    continue
+                bar_ts = int(rec.get("bar_ts") or 0)
+                key = (rec["symbol"], bar_ts)
+                ver = str(rec.get("version", ""))
+                # newer / primary wins on same bar
+                score = (1 if is_primary(ver) else 0, ver)
+                prev = by_key.get(key)
+                if prev is None or score > prev["_score"]:
+                    rec["_version"] = ver
+                    rec["_primary"] = is_primary(ver)
+                    rec["_score"] = score
+                    by_key[key] = rec
     out = list(by_key.values())
-    out.sort(key=lambda r: (r.get("bar_ts") or 0, r["_src"]))
+    out.sort(key=lambda r: (r.get("bar_ts") or 0))
     return out
 
 
 def resolve(sig):
-    """Прогнать сигнал по свечам → result, bars, R."""
     symbol = sig["symbol"]
     entry = float(sig["entry"])
     stop = float(sig["stop"])
@@ -111,21 +116,72 @@ def resolve(sig):
     return "OPEN", len(bars), 0.0, f"last={last}"
 
 
+def run_equity(trades, label):
+    capital = START_CAPITAL
+    peak = capital
+    max_dd = 0.0
+    closed = open_n = 0
+    lines = [
+        f"--- Equity | {label} | risk {RISK_PCT*100:.0f}% | BE after TP1 ---",
+        f"{'time':16} {'sym':10} {'ver':12} {'result':10} {'R':>6} {'risk$':>8} {'pnl$':>8} {'equity':>10}",
+        "-" * 78,
+    ]
+    for t in trades:
+        risk_usd = capital * RISK_PCT
+        if t["result"] == "OPEN":
+            open_n += 1
+            pnl, r_use = 0.0, 0.0
+        elif t["result"] == "TP1":
+            open_n += 1
+            r_use = t["r"]
+            pnl = risk_usd * r_use
+            capital += pnl
+        elif t["result"] == "ERROR":
+            r_use, pnl = 0.0, 0.0
+        else:
+            closed += 1
+            r_use = t["r"]
+            pnl = risk_usd * r_use
+            capital += pnl
+
+        peak = max(peak, capital)
+        dd = (peak - capital) / peak * 100 if peak > 0 else 0
+        max_dd = max(max_dd, dd)
+        ver = (t.get("version") or "?")[:12]
+        lines.append(
+            f"{t['time']:16} {t['symbol']:10} {ver:12} {t['result']:10} "
+            f"{r_use:+5.1f}R {risk_usd:8.2f} {pnl:+8.2f} {capital:10.2f}"
+        )
+
+    counted = [t for t in trades if t["result"] not in ("OPEN", "ERROR")]
+    total_r = sum(t["r"] for t in counted)
+    n = len(counted)
+    lines += [
+        "",
+        f"Сигналов:  {len(trades)}  | закрыто: {closed}  | open: {open_n}",
+        f"Start:     ${START_CAPITAL:.2f}",
+        f"Final:     ${capital:.2f}  ({(capital/START_CAPITAL-1)*100:+.1f}%)",
+        f"Total R:   {total_r:+.1f}R",
+        f"Avg R:     {(total_r/n if n else 0):+.2f}R",
+        f"Max DD:    {max_dd:.1f}%",
+        "",
+    ]
+    return lines, capital, total_r, n, max_dd
+
+
 def main():
     signals = load_signals()
     print("=" * 64)
-    print("PAPER ENGINE | $300 start | BE after TP1")
-    print(f"Сигналов: {len(signals)}")
+    print("PAPER ENGINE | DUMP-only | $300 | BE after TP1")
+    print(f"Сигналов в signals_dump: {len(signals)}")
     print("=" * 64)
 
     if not signals:
-        print("Нет сигналов в signals/ / signals_dump/")
+        print("Нет сигналов в signals_dump/")
         return
 
     trades = []
     for sig in signals:
-        src = sig["_src"]
-        risk_pct = sig["_risk"]
         name = sig["symbol"].split("/")[0]
         body = float(sig.get("body_pct") or 0)
         bar_ts = int(sig.get("bar_ts") or 0)
@@ -136,83 +192,57 @@ def main():
         result, bars, r, extra = resolve(sig)
         trades.append({
             "time": tstr,
-            "src": src,
             "symbol": name,
             "body": round(body, 1),
             "result": result,
             "bars": bars,
             "r": r,
-            "risk_pct": risk_pct,
             "extra": extra,
+            "version": sig.get("_version", ""),
+            "primary": sig.get("_primary", False),
             "entry": float(sig["entry"]),
             "stop": float(sig["stop"]),
             "tp1": float(sig["tp1"]),
             "tp2": float(sig["tp2"]),
         })
-        print(f"{tstr} | {src:4} | {name:10} | {result:10} | {bars:3}б | {r:+.1f}R  {extra}")
-        time.sleep(0.2)
+        tag = "v0.2b" if sig.get("_primary") else "old"
+        print(f"{tstr} | DUMP | {name:10} | {tag:5} | {result:10} | {bars:3}б | {r:+.1f}R  {extra}")
+        time.sleep(0.15)
 
-    # equity — по времени, compound
     trades_sorted = sorted(trades, key=lambda t: t["time"])
-    capital = START_CAPITAL
-    peak = capital
-    max_dd = 0.0
-    closed = 0
-    open_n = 0
-    lines = [
+    primary = [t for t in trades_sorted if t["primary"]]
+    legacy = [t for t in trades_sorted if not t["primary"]]
+
+    header = [
         f"PAPER report | {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
-        f"Start ${START_CAPITAL:.0f} | RAID risk 4% | DUMP risk 2% | BE after TP1",
+        f"DUMP-only | focus v0.2b | risk {RISK_PCT*100:.0f}% | BE after TP1 | start ${START_CAPITAL:.0f}",
+        f"Всего в jsonl: {len(trades_sorted)}  | v0.2b: {len(primary)}  | legacy dump: {len(legacy)}",
         "",
-        f"{'time':16} {'src':4} {'sym':10} {'result':10} {'R':>6} {'risk$':>8} {'pnl$':>8} {'equity':>10}",
-        "-" * 72,
     ]
 
-    for t in trades_sorted:
-        risk_usd = capital * t["risk_pct"]
-        # OPEN / TP1 still open: считаем unrealized 0 для equity closed-path;
-        # для OPEN r=0; для TP1 open даём текущий r как бумажный
-        if t["result"] == "OPEN":
-            open_n += 1
-            pnl = 0.0
-            r_use = 0.0
-        elif t["result"] == "TP1":
-            open_n += 1
-            r_use = t["r"]  # paper mark at TP1
-            pnl = risk_usd * r_use
-            capital += pnl
-        elif t["result"] == "ERROR":
-            r_use = 0.0
-            pnl = 0.0
-        else:
-            closed += 1
-            r_use = t["r"]
-            pnl = risk_usd * r_use
-            capital += pnl
+    lines = list(header)
+    if primary:
+        eq_lines, final, total_r, n, max_dd = run_equity(primary, "DUMP v0.2b (PRIMARY)")
+        lines.extend(eq_lines)
+    else:
+        lines += [
+            "--- PRIMARY v0.2b ---",
+            "Пока нет сигналов dump-v0.2b в signals_dump/.
+Запусти DUMP-сканер на ветке dump и копи сигналы.",
+            "",
+        ]
+        final, total_r, n, max_dd = START_CAPITAL, 0.0, 0, 0.0
 
-        peak = max(peak, capital)
-        dd = (peak - capital) / peak * 100 if peak > 0 else 0
-        max_dd = max(max_dd, dd)
+    if legacy:
+        leg_lines, _, _, _, _ = run_equity(legacy, "legacy DUMP (не v0.2b, справочно)")
+        lines.extend(leg_lines)
 
-        lines.append(
-            f"{t['time']:16} {t['src']:4} {t['symbol']:10} {t['result']:10} "
-            f"{r_use:+5.1f}R {risk_usd:8.2f} {pnl:+8.2f} {capital:10.2f}"
-        )
-
-    total_r = sum(t["r"] for t in trades_sorted if t["result"] not in ("OPEN", "ERROR"))
-    n_count = sum(1 for t in trades_sorted if t["result"] not in ("OPEN", "ERROR"))
     lines += [
-        "",
         "=" * 64,
-        f"Сигналов:     {len(trades)}",
-        f"Закрыто:      {closed}",
-        f"Ещё open:     {open_n}",
-        f"Start:        ${START_CAPITAL:.2f}",
-        f"Final:        ${capital:.2f}  ({(capital/START_CAPITAL-1)*100:+.1f}%)",
-        f"Total R:      {total_r:+.1f}R",
-        f"Avg R:        {(total_r/n_count if n_count else 0):+.2f}R",
-        f"Max DD:       {max_dd:.1f}%",
-        "=" * 64,
+        "PRIMARY = только dump-v0.2b (body 6.5-9, vol>=3, stop 3%).",
+        "RAID в paper больше не считается.",
         "Бумажная торговля. Реальных ордеров нет.",
+        "=" * 64,
     ]
 
     report = "\n".join(lines)
@@ -225,12 +255,19 @@ def main():
     (OUT_DIR / "latest.txt").write_text(report + "\n", encoding="utf-8")
     state = {
         "updated": datetime.now(timezone.utc).isoformat(),
+        "mode": "DUMP-only",
+        "primary_version": "dump-v0.2b",
         "start": START_CAPITAL,
-        "final": round(capital, 2),
+        "final_primary": round(final, 2),
+        "total_r_primary": round(total_r, 2),
+        "n_primary": n,
         "max_dd_pct": round(max_dd, 2),
-        "trades": trades_sorted,
+        "trades_primary": primary,
+        "trades_legacy": legacy,
     }
-    (OUT_DIR / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    (OUT_DIR / "state.json").write_text(
+        json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(f"\nСохранено: paper/latest.txt  paper/state.json")
     print("Готово. Push all")
 
