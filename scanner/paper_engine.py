@@ -25,7 +25,6 @@ TP1_RR = 1.6
 TP2_RR = 3.0
 BE_AFTER_TP1 = True
 
-# основная линейка paper
 PRIMARY_VERSIONS = ("v0.2b", "dump-v0.2b")
 
 exchange = ccxt.bybit({
@@ -58,7 +57,6 @@ def load_signals():
                 bar_ts = int(rec.get("bar_ts") or 0)
                 key = (rec["symbol"], bar_ts)
                 ver = str(rec.get("version", ""))
-                # newer / primary wins on same bar
                 score = (1 if is_primary(ver) else 0, ver)
                 prev = by_key.get(key)
                 if prev is None or score > prev["_score"]:
@@ -227,8 +225,8 @@ def main():
     else:
         lines += [
             "--- PRIMARY v0.2b ---",
-            "Пока нет сигналов dump-v0.2b в signals_dump/.
-Запусти DUMP-сканер на ветке dump и копи сигналы.",
+            "Пока нет сигналов dump-v0.2b в signals_dump/.",
+            "Запусти DUMP-сканер на ветке dump и копи сигналы.",
             "",
         ]
         final, total_r, n, max_dd = START_CAPITAL, 0.0, 0, 0.0
