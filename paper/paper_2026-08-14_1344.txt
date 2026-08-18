@@ -1,23 +1,18 @@
-PAPER report | 2026-08-17 06:20 UTC
+PAPER report | 2026-08-14 13:44 UTC
 DUMP-only | focus v0.2b | risk 2% | BE after TP1 | start $300
-Всего в jsonl: 7  | v0.2b: 7  | legacy dump: 0
+Всего в jsonl: 2  | v0.2b: 2  | legacy dump: 0
 
 --- Equity | DUMP v0.2b (PRIMARY) | risk 2% | BE after TP1 ---
 time             sym        ver          result          R    risk$     pnl$     equity
 ------------------------------------------------------------------------------
 2026-08-14 09:15 CYS        dump-v0.2b   STOP        -1.0R     6.00    -6.00     294.00
 2026-08-14 09:45 BLUAI      dump-v0.2b   STOP        -1.0R     5.88    -5.88     288.12
-2026-08-15 06:00 DOLO       dump-v0.2b   TP1+TP2     +2.3R     5.76   +13.25     301.37
-2026-08-16 07:45 PIXEL      dump-v0.2b   TP1         +1.6R     6.03    +9.64     311.02
-2026-08-16 16:15 BEL        dump-v0.2b   STOP        -1.0R     6.22    -6.22     304.80
-2026-08-16 23:45 SOPH       dump-v0.2b   TP1         +1.6R     6.10    +9.75     314.55
-2026-08-17 03:30 BTW        dump-v0.2b   STOP        -1.0R     6.29    -6.29     308.26
 
-Сигналов:  7  | закрыто: 5  | open: 2
+Сигналов:  2  | закрыто: 2  | open: 0
 Start:     $300.00
-Final:     $308.26  (+2.8%)
-Total R:   +1.5R
-Avg R:     +0.21R
+Final:     $288.12  (-4.0%)
+Total R:   -2.0R
+Avg R:     -1.00R
 Max DD:    4.0%
 
 ================================================================
