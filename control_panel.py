@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RAID / DUMP Control Panel — компактно. DUMP = основная."""
+"""RAID / DUMP Control Panel — DUMP primary + audit buttons."""
 
 import os, sys, subprocess, threading, queue, shutil
 from datetime import datetime
@@ -16,8 +16,9 @@ PAPER_DIR = ROOT / "paper"
 
 RAID_SCRIPT = SCANNER_DIR / "v8.32-exp.py"
 DUMP_SCRIPT = SCANNER_DIR / "dump_scanner.py"
-DUMP_BT = SCANNER_DIR / "backtest_dump_filters.py"  # lab: close/trend/BTC
-DUMP_BT_FALLBACK = SCANNER_DIR / "backtest_dump.py"
+DUMP_BT = SCANNER_DIR / "backtest_dump_tools.py"
+DUMP_BT_FALLBACK = SCANNER_DIR / "backtest_dump_filters.py"
+AUDIT_SCRIPT = SCANNER_DIR / "audit_dump.py"
 CHECK_SCRIPT = SCANNER_DIR / "check_signals.py"
 PAPER_SCRIPT = SCANNER_DIR / "paper_engine.py"
 if not RAID_SCRIPT.exists():
@@ -38,7 +39,7 @@ class ControlPanel(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("DUMP / RAID — Control")
-        self.geometry("780x640")
+        self.geometry("800x660")
         self.minsize(640, 480)
         self.configure(bg="#1e1e1e")
         self.raid_proc = None
@@ -47,7 +48,7 @@ class ControlPanel(tk.Tk):
         self._build_ui()
         self.after(100, self._poll_log)
         self._log(f"Панель | {ROOT}")
-        self._log(f"DUMP: {DUMP_SCRIPT.name} (основная) | RAID: {RAID_SCRIPT.name}")
+        self._log(f"DUMP: {DUMP_SCRIPT.name} | RAID: {RAID_SCRIPT.name}")
 
     def _build_ui(self):
         style = ttk.Style()
@@ -70,32 +71,31 @@ class ControlPanel(tk.Tk):
         cols.columnconfigure(0, weight=1)
         cols.columnconfigure(1, weight=1)
 
-        # DUMP — primary, short list
         right = tk.Frame(cols, bg="#2e2a1a", padx=8, pady=8)
         right.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
-        tk.Label(right, text="● DUMP v0.2b  (основная)", bg="#2e2a1a", fg="#fbbf24",
+        tk.Label(right, text="● DUMP v0.2b", bg="#2e2a1a", fg="#fbbf24",
                  font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 6))
         for text, cmd in [
             ("▶ Старт DUMP", self.cmd_start_dump),
             ("■ Стоп DUMP", self.cmd_stop_dump),
-            ("BT filters (close/BTC)", self.cmd_bt_dump),
+            ("BT tools (live-stop)", self.cmd_bt_dump),
             ("Последний BT", self.cmd_show_dump_bt),
             ("Push логов DUMP", self.cmd_push_dump_logs),
         ]:
             ttk.Button(right, text=text, command=cmd).pack(fill="x", pady=2)
 
-        # RAID — minimal
         left = tk.Frame(cols, bg="#1a2e1a", padx=8, pady=8)
         left.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
-        tk.Label(left, text="○ RAID  (наблюдение)", bg="#1a2e1a", fg="#86efac",
+        tk.Label(left, text="○ RAID / Аудит", bg="#1a2e1a", fg="#86efac",
                  font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 6))
         for text, cmd in [
             ("▶ Старт RAID", self.cmd_start_raid),
             ("■ Стоп RAID", self.cmd_stop_raid),
+            ("Аудит1: стоп/геометрия", self.cmd_audit),
+            ("Аудит2: отчёт файл", self.cmd_show_audit),
         ]:
             ttk.Button(left, text=text, command=cmd).pack(fill="x", pady=2)
 
-        # shared row
         shared = ttk.Frame(self)
         shared.pack(fill="x", padx=12, pady=4)
         for text, cmd in [
@@ -152,7 +152,7 @@ class ControlPanel(tk.Tk):
             p = subprocess.run(args, cwd=cwd, capture_output=True, text=True,
                                encoding="utf-8", errors="replace", timeout=120, env=self._env())
             if p.stdout:
-                for line in p.stdout.strip().splitlines()[-40:]:
+                for line in p.stdout.strip().splitlines()[-50:]:
                     self._log(line)
             if p.stderr and p.returncode != 0:
                 for line in p.stderr.strip().splitlines()[-15:]:
@@ -224,7 +224,7 @@ class ControlPanel(tk.Tk):
         else:
             self._log(f"{label} не запущен")
 
-    def _run_bt(self, script, name):
+    def _run_script(self, script, name):
         def job():
             self._log(f"--- {name} ---")
             if not script.exists():
@@ -241,7 +241,7 @@ class ControlPanel(tk.Tk):
                 code = p.wait()
                 self._log(f"{name} OK" if code == 0 else f"exit {code}")
             except Exception as e:
-                self._log(f"BT error: {e}")
+                self._log(f"error: {e}")
 
         self._run_async(job)
 
@@ -267,7 +267,6 @@ class ControlPanel(tk.Tk):
         except Exception as e:
             self._log(str(e))
 
-    # DUMP
     def cmd_start_dump(self):
         self._start_proc(DUMP_SCRIPT, "DUMP", "dump_proc", self.dump_status)
 
@@ -276,13 +275,21 @@ class ControlPanel(tk.Tk):
 
     def cmd_bt_dump(self):
         script = DUMP_BT if DUMP_BT.exists() else DUMP_BT_FALLBACK
-        self._run_bt(script, "DUMP BT filters")
+        self._run_script(script, "DUMP BT tools")
 
     def cmd_show_dump_bt(self):
-        p = BACKTESTS_DIR / "latest_dump_filters.txt"
+        p = BACKTESTS_DIR / "latest_dump_tools.txt"
+        if not p.exists():
+            p = BACKTESTS_DIR / "latest_dump_filters.txt"
         if not p.exists():
             p = BACKTESTS_DIR / "latest_dump.txt"
         self._show_file(p)
+
+    def cmd_audit(self):
+        self._run_script(AUDIT_SCRIPT, "Аудит DUMP")
+
+    def cmd_show_audit(self):
+        self._show_file(BACKTESTS_DIR / "audit_dump_latest.txt")
 
     def cmd_push_dump_logs(self):
         def job():
@@ -304,14 +311,12 @@ class ControlPanel(tk.Tk):
         SIGNALS_DUMP_DIR.mkdir(exist_ok=True)
         self._open_dir(SIGNALS_DUMP_DIR)
 
-    # RAID minimal
     def cmd_start_raid(self):
         self._start_proc(RAID_SCRIPT, "RAID", "raid_proc", self.raid_status)
 
     def cmd_stop_raid(self):
         self._stop_proc("raid_proc", "RAID", self.raid_status)
 
-    # shared
     def cmd_check_signals(self):
         def job():
             if not CHECK_SCRIPT.exists():
