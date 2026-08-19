@@ -1,12 +1,12 @@
 {
-  "updated": "2026-08-18T06:50:42.141815+00:00",
+  "updated": "2026-08-18T10:30:14.370991+00:00",
   "mode": "DUMP-only",
   "primary_version": "dump-v0.2b",
   "start": 300.0,
-  "final_primary": 298.06,
-  "total_r_primary": -0.1,
-  "n_primary": 10,
-  "max_dd_pct": 7.76,
+  "final_primary": 292.1,
+  "total_r_primary": -1.1,
+  "n_primary": 11,
+  "max_dd_pct": 9.61,
   "trades_primary": [
     {
       "time": "2026-08-14 09:15",
@@ -157,6 +157,21 @@
       "stop": 0.001395444,
       "tp1": 0.0012897695999999998,
       "tp2": 0.0012328679999999998
+    },
+    {
+      "time": "2026-08-18 08:45",
+      "symbol": "HANA",
+      "body": 6.7,
+      "result": "STOP",
+      "bars": 1,
+      "r": -1.0,
+      "extra": "",
+      "version": "dump-v0.2b",
+      "primary": true,
+      "entry": 0.02698,
+      "stop": 0.027789400000000002,
+      "tp1": 0.025684959999999996,
+      "tp2": 0.024551799999999995
     }
   ],
   "trades_legacy": []
