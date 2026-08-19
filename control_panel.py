@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RAID / DUMP Control Panel — DUMP primary + audit buttons."""
+"""RAID / DUMP Control Panel — DUMP primary + audit + geometry lab."""
 
 import os, sys, subprocess, threading, queue, shutil
 from datetime import datetime
@@ -17,6 +17,7 @@ PAPER_DIR = ROOT / "paper"
 RAID_SCRIPT = SCANNER_DIR / "v8.32-exp.py"
 DUMP_SCRIPT = SCANNER_DIR / "dump_scanner.py"
 DUMP_BT = SCANNER_DIR / "backtest_dump_tools.py"
+DUMP_BT_GEOM = SCANNER_DIR / "backtest_dump_geometry.py"
 DUMP_BT_FALLBACK = SCANNER_DIR / "backtest_dump_filters.py"
 AUDIT_SCRIPT = SCANNER_DIR / "audit_dump.py"
 CHECK_SCRIPT = SCANNER_DIR / "check_signals.py"
@@ -39,7 +40,7 @@ class ControlPanel(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("DUMP / RAID — Control")
-        self.geometry("800x660")
+        self.geometry("800x680")
         self.minsize(640, 480)
         self.configure(bg="#1e1e1e")
         self.raid_proc = None
@@ -78,8 +79,9 @@ class ControlPanel(tk.Tk):
         for text, cmd in [
             ("▶ Старт DUMP", self.cmd_start_dump),
             ("■ Стоп DUMP", self.cmd_stop_dump),
+            ("BT geometry (lab)", self.cmd_bt_geom),
             ("BT tools (live-stop)", self.cmd_bt_dump),
-            ("Последний BT", self.cmd_show_dump_bt),
+            ("Последний BT geom", self.cmd_show_geom_bt),
             ("Push логов DUMP", self.cmd_push_dump_logs),
         ]:
             ttk.Button(right, text=text, command=cmd).pack(fill="x", pady=2)
@@ -277,6 +279,9 @@ class ControlPanel(tk.Tk):
         script = DUMP_BT if DUMP_BT.exists() else DUMP_BT_FALLBACK
         self._run_script(script, "DUMP BT tools")
 
+    def cmd_bt_geom(self):
+        self._run_script(DUMP_BT_GEOM, "DUMP BT geometry")
+
     def cmd_show_dump_bt(self):
         p = BACKTESTS_DIR / "latest_dump_tools.txt"
         if not p.exists():
@@ -284,6 +289,9 @@ class ControlPanel(tk.Tk):
         if not p.exists():
             p = BACKTESTS_DIR / "latest_dump.txt"
         self._show_file(p)
+
+    def cmd_show_geom_bt(self):
+        self._show_file(BACKTESTS_DIR / "latest_dump_geom.txt")
 
     def cmd_audit(self):
         self._run_script(AUDIT_SCRIPT, "Аудит DUMP")
