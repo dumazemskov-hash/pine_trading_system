@@ -1,20 +1,9 @@
 #!/usr/bin/env python3
 """
 DUMP tools lab — 60d IS/OOS
-База entry v0.2b (body 6.5-9, vol>=3, pump>=8, stop 3%, TP 1.6/3R).
-Поверх — инструменты из SMC / volume-profile / regime (GitHub synthesis):
-
-  atr_cap      — skip если ATR/entry > X% (шум)
-  cpos         — close в нижней части range
-  btc_regime   — not_up / red / down
-  vp_proxy     — dump с high vol-bar; skip если vol_ratio < X (уже есть) +
-                 require signal range >= k * ATR (initiative)
-  prior_green  — бар до сигнала зелёный (pump-leg рядом)
-  no_cascade   — не 2-й сильный red подряд (body prev < 4%)
-  score        — min composite: touches-like proxies (vol + cpos + pump fresh)
-  wick_stop    — stop = high * 1.001, skip if risk > max%
-
-Цель: найти что держит OOS, не подгонять IS.
+Стоп = КАК В LIVE dump_scanner (не fixed 3%):
+  stop = min(high + ATR*0.35, entry * 1.03)
+Live-сканер не меняем. Цель — честный baseline vs paper.
 """
 
 import ccxt, time
@@ -38,45 +27,36 @@ IS_FRAC = 2.0 / 3.0
 RISK_PCT = 0.02
 BTC_SYM = "BTC/USDT:USDT"
 
+# как dump_scanner.py
+STOP_ATR_MULT = 0.35
+MAX_RISK_PCT = 0.03
+
 BASE = dict(
     pump_lb=6, pump_min=8.0, min_body=6.5, max_body=9.0, vol_ratio=3.0,
     close_pos_max=0.35,
-    max_atr_pct=None,          # e.g. 6.0
+    max_atr_pct=None,
     require_prior_green=False,
-    no_cascade=False,          # skip if prev red body > 4%
-    min_rng_atr=None,          # signal range / ATR >= k
-    btc_mode=None,             # None | not_up | red | down
+    no_cascade=False,
+    min_rng_atr=None,
+    btc_mode=None,
     btc_not_up_pct=1.5,
-    stop_mode="fixed",         # fixed | wick
+    stop_mode="live",   # live | fixed | wick  — default = live scanner
     stop_pct=0.03,
     max_stop_pct=0.05,
-    min_score=None,            # composite 0-5
+    min_score=None,
 )
 
 VARIANTS = {
-    "base":           {**BASE},
+    "base_live":      {**BASE},  # = dump_scanner stop
+    "base_fixed3":    {**BASE, "stop_mode": "fixed", "stop_pct": 0.03},  # старый BT для сравнения
     "atr6":           {**BASE, "max_atr_pct": 6.0},
-    "atr5":           {**BASE, "max_atr_pct": 5.0},
     "cpos20":         {**BASE, "close_pos_max": 0.20},
-    "cpos25":         {**BASE, "close_pos_max": 0.25},
-    "prior_green":    {**BASE, "require_prior_green": True},
     "no_cascade":     {**BASE, "no_cascade": True},
-    "rng_atr12":      {**BASE, "min_rng_atr": 1.2},
-    "rng_atr15":      {**BASE, "min_rng_atr": 1.5},
-    "btc_red":        {**BASE, "btc_mode": "red"},
-    "btc_not_up":     {**BASE, "btc_mode": "not_up"},
-    "btc_down":       {**BASE, "btc_mode": "down"},
-    "wick_cap5":      {**BASE, "stop_mode": "wick", "max_stop_pct": 0.05},
-    "wick_cap4":      {**BASE, "stop_mode": "wick", "max_stop_pct": 0.04},
-    "score3":         {**BASE, "min_score": 3},
-    "score4":         {**BASE, "min_score": 4},
-    # combos that looked least bad earlier
-    "cpos20_atr6":    {**BASE, "close_pos_max": 0.20, "max_atr_pct": 6.0},
-    "cpos20_btc_red": {**BASE, "close_pos_max": 0.20, "btc_mode": "red"},
     "cpos20_nocasc":  {**BASE, "close_pos_max": 0.20, "no_cascade": True},
+    "btc_red":        {**BASE, "btc_mode": "red"},
+    "cpos20_btc_red": {**BASE, "close_pos_max": 0.20, "btc_mode": "red"},
+    "score4":         {**BASE, "min_score": 4},
     "pack_a":         {**BASE, "close_pos_max": 0.20, "max_atr_pct": 6.0, "no_cascade": True},
-    "pack_b":         {**BASE, "close_pos_max": 0.20, "btc_mode": "red", "no_cascade": True},
-    "pack_c":         {**BASE, "close_pos_max": 0.25, "max_atr_pct": 5.0, "min_rng_atr": 1.2, "btc_mode": "red"},
 }
 
 exchange = ccxt.bybit({"enableRateLimit": True, "options": {"defaultType": "swap", "fetchMarkets": ["linear"]}})
@@ -90,6 +70,12 @@ def calc_atr(ohlcv, i, period=14):
         h, l, pc = ohlcv[j][2], ohlcv[j][3], ohlcv[j - 1][4]
         trs.append(max(h - l, abs(h - pc), abs(l - pc)))
     return sum(trs) / len(trs)
+
+
+def calc_stop_live(entry, high, atr):
+    """Точная копия dump_scanner.check_signal stop."""
+    struct = high + (atr * STOP_ATR_MULT if atr else high * 0.005)
+    return min(struct, entry * (1 + MAX_RISK_PCT))
 
 
 def had_pump(ohlcv, i, pump_lb, pump_min):
@@ -117,8 +103,7 @@ def btc_ok(btc, ts, cfg):
     if idx is None or idx < 8:
         return True
     o, c = btc[idx][1], btc[idx][4]
-    n = 6
-    prev = btc[idx - n][4]
+    prev = btc[idx - 6][4]
     chg = (c - prev) / prev * 100 if prev else 0
     if mode == "down":
         return c < prev
@@ -129,8 +114,7 @@ def btc_ok(btc, ts, cfg):
     return True
 
 
-def composite_score(body, close_pos, vol_ratio, atr_pct, prior_green, pump_ok):
-    """0..5 rough quality."""
+def composite_score(body, close_pos, vol_ratio, atr_pct, prior_green):
     s = 0
     if close_pos <= 0.20:
         s += 1
@@ -195,17 +179,21 @@ def check_at(ohlcv, i, cfg, btc):
         return None
 
     if cfg.get("min_score") is not None:
-        sc = composite_score(body, close_pos, vol_ratio, atr_pct, prior_green, True)
+        sc = composite_score(body, close_pos, vol_ratio, atr_pct, prior_green)
         if sc < cfg["min_score"]:
             return None
 
     entry = c
-    if cfg["stop_mode"] == "wick":
+    mode = cfg.get("stop_mode", "live")
+    if mode == "live":
+        stop = calc_stop_live(entry, h, atr)
+    elif mode == "wick":
         stop = h * 1.001
         if (stop - entry) / entry > cfg["max_stop_pct"]:
             return None
     else:
         stop = entry * (1 + cfg["stop_pct"])
+
     risk = stop - entry
     if risk <= 0 or risk / entry < 0.005:
         return None
@@ -214,6 +202,7 @@ def check_at(ohlcv, i, cfg, btc):
         "ts": last[0], "entry": entry, "stop": stop,
         "tp1": entry - risk * TP1_RR, "tp2": entry - risk * TP2_RR,
         "risk": risk, "body": body, "bar_index": i,
+        "stop_pct_px": risk / entry * 100,
     }
 
 
@@ -273,12 +262,15 @@ def fetch_ohlcv_full(symbol, need):
 def summarize(raw, label):
     stats = defaultdict(int)
     onebar = 0
+    stops_pct = []
     for s in raw:
         stats[s["result"]] += 1
         stats["TOTAL"] += 1
         stats["sum_R"] += s["r"]
         if s["result"] in ("STOP", "TP1->STOP") and s["bars"] == 1:
             onebar += 1
+        if s.get("stop_pct_px") is not None:
+            stops_pct.append(s["stop_pct_px"])
     total = stats["TOTAL"]
     lines = [f"--- {label} ---"]
     if total == 0:
@@ -293,8 +285,9 @@ def summarize(raw, label):
         peak = max(peak, capital)
         max_dd = max(max_dd, (peak - capital) / peak * 100 if peak else 0)
     onebar_pct = onebar / losses * 100 if losses else 0
+    avg_stop = sum(stops_pct) / len(stops_pct) if stops_pct else 0
     lines += [
-        f"N={total} WR={wins/total*100:.1f}% 1-bar={onebar}({onebar_pct:.0f}%)",
+        f"N={total} WR={wins/total*100:.1f}% 1-bar={onebar}({onebar_pct:.0f}%) avg_stop={avg_stop:.2f}%",
         f"Final ${capital:.2f} ({(capital/START_CAPITAL-1)*100:+.1f}%) "
         f"AvgR {stats['sum_R']/total:+.2f} MaxDD {max_dd:.1f}%",
     ]
@@ -321,6 +314,7 @@ def run_variant(name, cfg, by_sym, btc):
                 stop_ban = i + STOP_COOLDOWN
             raw_all.append({
                 "ts_ms": sig["ts"], "result": res, "bars": bars, "r": r,
+                "stop_pct_px": sig.get("stop_pct_px"),
                 "split": "IS" if i < is_end else "OOS",
             })
     raw_all.sort(key=lambda x: x["ts_ms"])
@@ -332,19 +326,15 @@ def run_variant(name, cfg, by_sym, btc):
         bits.append(f"atr<{cfg['max_atr_pct']}%")
     if cfg.get("btc_mode"):
         bits.append(f"btc={cfg['btc_mode']}")
-    if cfg.get("require_prior_green"):
-        bits.append("prior_green")
     if cfg.get("no_cascade"):
         bits.append("no_cascade")
-    if cfg.get("min_rng_atr"):
-        bits.append(f"rng/atr>={cfg['min_rng_atr']}")
     if cfg.get("min_score"):
         bits.append(f"score>={cfg['min_score']}")
 
     lines = [
         "=" * 64,
         f"SUMMARY | DUMP-TOOLS {name}",
-        " | ".join(bits) + f" | 60d",
+        " | ".join(bits) + " | 60d | stop~live",
         "=" * 64,
     ]
     for label, chunk in [("FULL", raw_all), ("IS (first 2/3)", raw_is), ("OOS (last 1/3)", raw_oos)]:
@@ -355,13 +345,14 @@ def run_variant(name, cfg, by_sym, btc):
 
 def main():
     print("=" * 64)
-    print("DUMP tools lab | SMC/VP/BTC/ATR | 60d IS/OOS")
+    print("DUMP tools lab | stop = LIVE formula | 60d IS/OOS")
+    print("calc_stop = min(high+0.35*ATR, entry*1.03)  | scanner NOT changed")
     print("=" * 64)
     symbols = top_symbols()
     if BTC_SYM not in symbols:
         symbols = [BTC_SYM] + symbols
 
-    print(f"BTC load...")
+    print("BTC load...")
     try:
         btc = fetch_ohlcv_full(BTC_SYM, min(BARS_LIMIT, 4000))
         print(f"BTC bars={len(btc)}")
@@ -385,8 +376,8 @@ def main():
     print(f"\nЗагружено: {len(by_sym)} + BTC\n")
 
     all_lines = [
-        f"DUMP tools 60d | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
-        f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)}",
+        f"DUMP tools LIVE-stop | {datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M')} UTC",
+        f"Days={LOOKBACK_DAYS} | symbols={len(by_sym)} | stop=min(high+0.35ATR, entry*1.03)",
         "",
     ]
     for name, cfg in VARIANTS.items():
