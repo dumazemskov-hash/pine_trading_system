@@ -1,0 +1,73 @@
+DUMP-LONG invert | 2026-08-19_0955 UTC
+Days=60 | symbols=149
+
+================================================================
+SUMMARY | DUMP-LONG long_under_low
+LONG invert | stop=under_low | 60d | live untouched
+================================================================
+--- FULL ---
+N=32 WR=18.8% 1-bar=21(88%) avg_stop=2.22%
+Final $256.49 (-14.5%) AvgR -0.23 MaxDD 17.3%
+--- IS (first 2/3) ---
+N=16 WR=12.5% 1-bar=12(92%) avg_stop=2.18%
+Final $256.46 (-14.5%) AvgR -0.48 MaxDD 15.9%
+--- OOS (last 1/3) ---
+N=16 WR=25.0% 1-bar=9(82%) avg_stop=2.27%
+Final $300.04 (+0.0%) AvgR +0.02 MaxDD 11.8%
+
+================================================================
+SUMMARY | DUMP-LONG long_under_low5
+LONG invert | stop=under_low | 60d | live untouched
+================================================================
+--- FULL ---
+N=32 WR=18.8% 1-bar=21(88%) avg_stop=2.22%
+Final $256.49 (-14.5%) AvgR -0.23 MaxDD 17.3%
+--- IS (first 2/3) ---
+N=16 WR=12.5% 1-bar=12(92%) avg_stop=2.18%
+Final $256.46 (-14.5%) AvgR -0.48 MaxDD 15.9%
+--- OOS (last 1/3) ---
+N=16 WR=25.0% 1-bar=9(82%) avg_stop=2.27%
+Final $300.04 (+0.0%) AvgR +0.02 MaxDD 11.8%
+
+================================================================
+SUMMARY | DUMP-LONG long_fixed3
+LONG invert | stop=fixed | 60d | live untouched
+================================================================
+--- FULL ---
+N=33 WR=27.3% 1-bar=18(78%) avg_stop=3.00%
+Final $298.76 (-0.4%) AvgR +0.02 MaxDD 14.7%
+--- IS (first 2/3) ---
+N=17 WR=23.5% 1-bar=11(85%) avg_stop=3.00%
+Final $279.87 (-6.7%) AvgR -0.18 MaxDD 14.7%
+--- OOS (last 1/3) ---
+N=16 WR=31.2% 1-bar=7(70%) avg_stop=3.00%
+Final $320.25 (+6.7%) AvgR +0.23 MaxDD 13.2%
+
+================================================================
+SUMMARY | DUMP-LONG long_fixed2
+LONG invert | stop=fixed | 60d | live untouched
+================================================================
+--- FULL ---
+N=33 WR=18.2% 1-bar=23(96%) avg_stop=2.00%
+Final $257.15 (-14.3%) AvgR -0.22 MaxDD 22.4%
+--- IS (first 2/3) ---
+N=17 WR=17.6% 1-bar=13(100%) avg_stop=2.00%
+Final $268.26 (-10.6%) AvgR -0.31 MaxDD 14.5%
+--- OOS (last 1/3) ---
+N=16 WR=18.8% 1-bar=10(91%) avg_stop=2.00%
+Final $287.58 (-4.1%) AvgR -0.11 MaxDD 13.2%
+
+================================================================
+SUMMARY | DUMP-LONG long_cont
+LONG invert | stop=under_low | 60d | live untouched
+================================================================
+--- FULL ---
+N=21 WR=23.8% 1-bar=4(31%) avg_stop=5.07%
+Final $302.19 (+0.7%) AvgR +0.04 MaxDD 13.2%
+--- IS (first 2/3) ---
+N=9 WR=22.2% 1-bar=2(29%) avg_stop=4.32%
+Final $284.95 (-5.0%) AvgR -0.27 MaxDD 13.2%
+--- OOS (last 1/3) ---
+N=12 WR=25.0% 1-bar=2(33%) avg_stop=5.62%
+Final $318.15 (+6.1%) AvgR +0.27 MaxDD 4.0%
+

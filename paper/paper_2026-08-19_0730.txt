@@ -1,6 +1,6 @@
-PAPER report | 2026-08-20 07:04 UTC
+PAPER report | 2026-08-19 07:30 UTC
 DUMP-only | focus v0.2b | risk 2% | BE after TP1 | start $300
-Всего в jsonl: 16  | v0.2b: 16  | legacy dump: 0
+Всего в jsonl: 13  | v0.2b: 13  | legacy dump: 0
 
 --- Equity | DUMP v0.2b (PRIMARY) | risk 2% | BE after TP1 ---
 time             sym        ver          result          R    risk$     pnl$     equity
@@ -18,15 +18,12 @@ time             sym        ver          result          R    risk$     pnl$    
 2026-08-18 08:45 HANA       dump-v0.2b   STOP        -1.0R     5.96    -5.96     292.10
 2026-08-19 01:45 GPS        dump-v0.2b   TP1->BE     +0.8R     5.84    +4.67     296.77
 2026-08-19 04:15 TRIA       dump-v0.2b   STOP        -1.0R     5.94    -5.94     290.83
-2026-08-19 13:45 AXTI       dump-v0.2b   OPEN        +0.0R     5.82    +0.00     290.83
-2026-08-19 13:45 SNXX       dump-v0.2b   TP1->BE     +0.8R     5.82    +4.65     295.49
-2026-08-19 22:15 BB         dump-v0.2b   TP1+TP2     +2.3R     5.91   +13.59     309.08
 
-Сигналов:  16  | закрыто: 15  | open: 1
+Сигналов:  13  | закрыто: 13  | open: 0
 Start:     $300.00
-Final:     $309.08  (+3.0%)
-Total R:   +1.8R
-Avg R:     +0.12R
+Final:     $290.83  (-3.1%)
+Total R:   -1.3R
+Avg R:     -0.10R
 Max DD:    10.0%
 
 ================================================================

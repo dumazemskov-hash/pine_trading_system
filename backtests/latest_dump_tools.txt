@@ -1,0 +1,143 @@
+DUMP tools LIVE-stop | 2026-08-19_0942 UTC
+Days=60 | symbols=147 | stop=min(high+0.35ATR, entry*1.03)
+
+================================================================
+SUMMARY | DUMP-TOOLS base_live
+cpos<=0.35 | stop=live | 60d | stop~live
+================================================================
+--- FULL ---
+N=34 WR=20.6% 1-bar=17(81%) avg_stop=3.00%
+Final $307.80 (+2.6%) AvgR +0.06 MaxDD 10.8%
+--- IS (first 2/3) ---
+N=18 WR=33.3% 1-bar=7(70%) avg_stop=3.00%
+Final $344.89 (+15.0%) AvgR +0.42 MaxDD 9.6%
+--- OOS (last 1/3) ---
+N=16 WR=6.2% 1-bar=10(91%) avg_stop=3.00%
+Final $267.74 (-10.8%) AvgR -0.34 MaxDD 10.8%
+
+================================================================
+SUMMARY | DUMP-TOOLS base_fixed3
+cpos<=0.35 | stop=fixed | 60d | stop~live
+================================================================
+--- FULL ---
+N=34 WR=20.6% 1-bar=17(81%) avg_stop=3.00%
+Final $307.80 (+2.6%) AvgR +0.06 MaxDD 10.8%
+--- IS (first 2/3) ---
+N=18 WR=33.3% 1-bar=7(70%) avg_stop=3.00%
+Final $344.89 (+15.0%) AvgR +0.42 MaxDD 9.6%
+--- OOS (last 1/3) ---
+N=16 WR=6.2% 1-bar=10(91%) avg_stop=3.00%
+Final $267.74 (-10.8%) AvgR -0.34 MaxDD 10.8%
+
+================================================================
+SUMMARY | DUMP-TOOLS atr6
+cpos<=0.35 | stop=live | atr<6.0% | 60d | stop~live
+================================================================
+--- FULL ---
+N=31 WR=22.6% 1-bar=15(83%) avg_stop=3.00%
+Final $327.04 (+9.0%) AvgR +0.16 MaxDD 9.6%
+--- IS (first 2/3) ---
+N=17 WR=35.3% 1-bar=6(67%) avg_stop=3.00%
+Final $351.93 (+17.3%) AvgR +0.50 MaxDD 9.6%
+--- OOS (last 1/3) ---
+N=14 WR=7.1% 1-bar=9(100%) avg_stop=3.00%
+Final $278.78 (-7.1%) AvgR -0.25 MaxDD 9.6%
+
+================================================================
+SUMMARY | DUMP-TOOLS cpos20
+cpos<=0.2 | stop=live | 60d | stop~live
+================================================================
+--- FULL ---
+N=23 WR=21.7% 1-bar=12(86%) avg_stop=3.00%
+Final $305.70 (+1.9%) AvgR +0.06 MaxDD 11.0%
+--- IS (first 2/3) ---
+N=14 WR=28.6% 1-bar=7(78%) avg_stop=3.00%
+Final $308.28 (+2.8%) AvgR +0.12 MaxDD 9.6%
+--- OOS (last 1/3) ---
+N=9 WR=11.1% 1-bar=5(100%) avg_stop=3.00%
+Final $297.48 (-0.8%) AvgR -0.03 MaxDD 5.9%
+
+================================================================
+SUMMARY | DUMP-TOOLS no_cascade
+cpos<=0.35 | stop=live | no_cascade | 60d | stop~live
+================================================================
+--- FULL ---
+N=19 WR=21.1% 1-bar=8(73%) avg_stop=3.00%
+Final $310.52 (+3.5%) AvgR +0.11 MaxDD 7.8%
+--- IS (first 2/3) ---
+N=10 WR=30.0% 1-bar=2(40%) avg_stop=3.00%
+Final $324.64 (+8.2%) AvgR +0.42 MaxDD 5.9%
+--- OOS (last 1/3) ---
+N=9 WR=11.1% 1-bar=6(100%) avg_stop=3.00%
+Final $286.94 (-4.4%) AvgR -0.23 MaxDD 7.8%
+
+================================================================
+SUMMARY | DUMP-TOOLS cpos20_nocasc
+cpos<=0.2 | stop=live | no_cascade | 60d | stop~live
+================================================================
+--- FULL ---
+N=11 WR=36.4% 1-bar=3(60%) avg_stop=3.00%
+Final $339.58 (+13.2%) AvgR +0.59 MaxDD 4.0%
+--- IS (first 2/3) ---
+N=7 WR=42.9% 1-bar=1(33%) avg_stop=3.00%
+Final $332.71 (+10.9%) AvgR +0.77 MaxDD 4.0%
+--- OOS (last 1/3) ---
+N=4 WR=25.0% 1-bar=2(100%) avg_stop=3.00%
+Final $306.20 (+2.1%) AvgR +0.27 MaxDD 4.0%
+
+================================================================
+SUMMARY | DUMP-TOOLS btc_red
+cpos<=0.35 | stop=live | btc=red | 60d | stop~live
+================================================================
+--- FULL ---
+N=21 WR=23.8% 1-bar=9(75%) avg_stop=3.00%
+Final $322.56 (+7.5%) AvgR +0.20 MaxDD 7.8%
+--- IS (first 2/3) ---
+N=11 WR=36.4% 1-bar=3(60%) avg_stop=3.00%
+Final $344.12 (+14.7%) AvgR +0.65 MaxDD 5.9%
+--- OOS (last 1/3) ---
+N=10 WR=10.0% 1-bar=6(86%) avg_stop=3.00%
+Final $281.20 (-6.3%) AvgR -0.31 MaxDD 7.8%
+
+================================================================
+SUMMARY | DUMP-TOOLS cpos20_btc_red
+cpos<=0.2 | stop=live | btc=red | 60d | stop~live
+================================================================
+--- FULL ---
+N=13 WR=23.1% 1-bar=6(86%) avg_stop=3.00%
+Final $312.59 (+4.2%) AvgR +0.18 MaxDD 7.8%
+--- IS (first 2/3) ---
+N=7 WR=28.6% 1-bar=3(75%) avg_stop=3.00%
+Final $307.60 (+2.5%) AvgR +0.20 MaxDD 4.0%
+--- OOS (last 1/3) ---
+N=6 WR=16.7% 1-bar=3(100%) avg_stop=3.00%
+Final $304.87 (+1.6%) AvgR +0.15 MaxDD 4.0%
+
+================================================================
+SUMMARY | DUMP-TOOLS score4
+cpos<=0.35 | stop=live | score>=4 | 60d | stop~live
+================================================================
+--- FULL ---
+N=12 WR=33.3% 1-bar=6(86%) avg_stop=3.00%
+Final $321.00 (+7.0%) AvgR +0.31 MaxDD 7.8%
+--- IS (first 2/3) ---
+N=7 WR=42.9% 1-bar=3(75%) avg_stop=3.00%
+Final $320.92 (+7.0%) AvgR +0.51 MaxDD 4.0%
+--- OOS (last 1/3) ---
+N=5 WR=20.0% 1-bar=3(100%) avg_stop=3.00%
+Final $300.07 (+0.0%) AvgR +0.02 MaxDD 4.0%
+
+================================================================
+SUMMARY | DUMP-TOOLS pack_a
+cpos<=0.2 | stop=live | atr<6.0% | no_cascade | 60d | stop~live
+================================================================
+--- FULL ---
+N=11 WR=36.4% 1-bar=3(60%) avg_stop=3.00%
+Final $339.58 (+13.2%) AvgR +0.59 MaxDD 4.0%
+--- IS (first 2/3) ---
+N=7 WR=42.9% 1-bar=1(33%) avg_stop=3.00%
+Final $332.71 (+10.9%) AvgR +0.77 MaxDD 4.0%
+--- OOS (last 1/3) ---
+N=4 WR=25.0% 1-bar=2(100%) avg_stop=3.00%
+Final $306.20 (+2.1%) AvgR +0.27 MaxDD 4.0%
+
