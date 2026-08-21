@@ -47,22 +47,52 @@ LOCK_PATH = ROOT / "scanner" / ".dump_scanner.lock"
 _lock_fd = None
 
 
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        if sys.platform.startswith("win"):
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            SYNCHRONIZE = 0x00100000
+            handle = kernel32.OpenProcess(SYNCHRONIZE, 0, pid)
+            if handle:
+                kernel32.CloseHandle(handle)
+                return True
+            return False
+        else:
+            os.kill(pid, 0)
+            return True
+    except (OSError, ProcessLookupError, PermissionError, ValueError):
+        return False
+
+
+def _read_lock_pid():
+    try:
+        text = LOCK_PATH.read_text(encoding="utf-8", errors="replace").strip()
+        first = text.splitlines()[0].strip() if text else ""
+        return int(first), text
+    except Exception:
+        return None, ""
+
+
 def acquire_lock():
     global _lock_fd
     if LOCK_PATH.exists():
+        pid, info = _read_lock_pid()
         age = time.time() - LOCK_PATH.stat().st_mtime
-        if age > 2 * 3600:
+        # мёртвый PID или lock старше 30 мин → снять
+        stale = (pid is None) or (not _pid_alive(pid)) or (age > 30 * 60)
+        if stale:
             try:
                 LOCK_PATH.unlink()
-            except Exception:
-                pass
+                print(f"Снят stale lock (pid={pid}, age={age/60:.0f}m)")
+            except Exception as e:
+                print(f"Не удалось снять lock: {e}")
+                sys.exit(1)
         else:
-            try:
-                info = LOCK_PATH.read_text(encoding="utf-8", errors="replace").strip()
-            except Exception:
-                info = "?"
-            print(f"DUMP уже запущен.\nLock: {LOCK_PATH}\n{info}")
-            print("Останови другой DUMP или удали scanner\\.dump_scanner.lock")
+            print(f"DUMP уже запущен (pid={pid}).\nLock: {LOCK_PATH}\n{info}")
+            print("Останови другой DUMP или: rm scanner/.dump_scanner.lock")
             sys.exit(0)
     try:
         _lock_fd = os.open(str(LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
