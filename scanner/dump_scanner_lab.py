@@ -10,8 +10,6 @@ from pathlib import Path
 
 # === DUMP LAB Scanner — parallel to v0.2b ===
 # Same entry as v0.2b + SKIP Asia session UTC 00:00–05:59
-# BT120d skip_asia: OOS AvgR +0.93 N=10 | FULL +0.71
-# Primary dump_scanner.py НЕ трогаем. Сигналы → signals_dump_lab/
 TELEGRAM_TOKEN = "8821282524:AAG7OKFKdzks0qy2WdqBi4gU2dV62Isp90k"
 CHAT_ID = "401292001"
 
@@ -31,7 +29,7 @@ TP1_RR = 1.6
 TP2_RR = 3.0
 CANDLES_TO_LOG = 40
 VERSION = "dump-lab-asia"
-ASIA_HOUR_END = 6  # skip if bar UTC hour < 6
+ASIA_HOUR_END = 6
 
 exchange = ccxt.bybit({
     "enableRateLimit": True,
@@ -48,28 +46,55 @@ LOCK_PATH = ROOT / "scanner" / ".dump_scanner_lab.lock"
 _lock_fd = None
 
 
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        if sys.platform.startswith("win"):
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.OpenProcess(0x00100000, 0, pid)
+            if handle:
+                kernel32.CloseHandle(handle)
+                return True
+            return False
+        else:
+            os.kill(pid, 0)
+            return True
+    except (OSError, ProcessLookupError, PermissionError, ValueError):
+        return False
+
+
+def _read_lock_pid():
+    try:
+        text = LOCK_PATH.read_text(encoding="utf-8", errors="replace").strip()
+        first = text.splitlines()[0].strip() if text else ""
+        return int(first), text
+    except Exception:
+        return None, ""
+
+
 def acquire_lock():
     global _lock_fd
     if LOCK_PATH.exists():
+        pid, info = _read_lock_pid()
         age = time.time() - LOCK_PATH.stat().st_mtime
-        if age > 2 * 3600:
+        stale = (pid is None) or (not _pid_alive(pid)) or (age > 30 * 60)
+        if stale:
             try:
                 LOCK_PATH.unlink()
-            except Exception:
-                pass
+                print(f"LAB: снят stale lock (pid={pid}, age={age/60:.0f}m)")
+            except Exception as e:
+                print(f"LAB lock: {e}")
+                sys.exit(1)
         else:
-            try:
-                info = LOCK_PATH.read_text(encoding="utf-8", errors="replace").strip()
-            except Exception:
-                info = "?"
-            print(f"DUMP-LAB уже запущен.\nLock: {LOCK_PATH}\n{info}")
-            print("Останови lab или удали scanner\\.dump_scanner_lab.lock")
+            print(f"DUMP-LAB уже запущен (pid={pid}).\n{info}")
             sys.exit(0)
     try:
         _lock_fd = os.open(str(LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         os.write(_lock_fd, f"{os.getpid()}\n{datetime.now(timezone.utc).isoformat()}\n".encode())
     except FileExistsError:
-        print("DUMP-LAB уже запущен (O_EXCL). Выход.")
+        print("DUMP-LAB уже запущен (O_EXCL).")
         sys.exit(0)
 
     def _clear():
@@ -114,7 +139,7 @@ def load_sent_from_disk():
                 if prev is None or bar_ts > prev:
                     last_signal_bar[sym] = bar_ts
                 loaded += 1
-    print(f"LAB дедуп с диска: {loaded} записей, unique={len(sent_signals)}")
+    print(f"LAB дедуп: {loaded}, unique={len(sent_signals)}")
 
 
 def send_telegram(message: str):
@@ -193,12 +218,9 @@ def check_signal(symbol, ohlcv_raw):
         return None
     last = ohlcv[-1]
     open_p, high_p, low_p, close_p, volume = last[1], last[2], last[3], last[4], last[5]
-
-    # LAB: skip Asia UTC 00:00–05:59 (bar open hour)
     hour = (last[0] // 1000) % 86400 // 3600
     if hour < ASIA_HOUR_END:
         return None
-
     if close_p >= open_p:
         return None
     body_pct = (open_p - close_p) / open_p * 100
@@ -237,8 +259,8 @@ def main():
     acquire_lock()
     print(f"[{datetime.now().strftime('%H:%M:%S')}] === DUMP LAB (skip Asia UTC0-5) ===")
     print(
-        f"v0.2b filters + skip hour<6 | body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | "
-        f"vol>={VOLUME_RATIO}x | stop {MAX_RISK_PCT*100:.0f}% | → signals_dump_lab/"
+        f"v0.2b + skip hour<6 | body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | "
+        f"vol>={VOLUME_RATIO}x | → signals_dump_lab/"
     )
     load_sent_from_disk()
     symbols = get_symbols()
@@ -273,7 +295,7 @@ def main():
                     f"Risk:  {rp:.2f}%\n"
                     f"Body:  {signal['body_pct']:.2f}%\n"
                     f"HourUTC: {signal.get('hour_utc')}\n"
-                    f"Mode:  lab skip-asia (parallel v0.2b)"
+                    f"Mode:  lab skip-asia"
                 )
                 send_telegram(msg)
                 print(
