@@ -1,6 +1,6 @@
-PAPER report | 2026-08-26 06:36 UTC
+PAPER report | 2026-08-25 06:59 UTC
 DUMP-only | focus v0.2b | risk 2% | BE after TP1 | start $300
-Всего в jsonl: 19  | v0.2b: 19  | legacy dump: 0
+Всего в jsonl: 18  | v0.2b: 18  | legacy dump: 0
 
 --- Equity | DUMP v0.2b (PRIMARY) | risk 2% | BE after TP1 ---
 time             sym        ver          result          R    risk$     pnl$     equity
@@ -23,9 +23,8 @@ time             sym        ver          result          R    risk$     pnl$    
 2026-08-19 22:15 BB         dump-v0.2b   TP1+TP2     +2.3R     6.00   +13.81     314.02
 2026-08-20 20:30 US         dump-v0.2b   STOP        -1.0R     6.28    -6.28     307.74
 2026-08-25 05:00 STORJ      dump-v0.2b   STOP        -1.0R     6.15    -6.15     301.59
-2026-08-26 04:30 EUL        dump-v0.2b   OPEN        +0.0R     6.03    +0.00     301.59
 
-Сигналов:  19  | закрыто: 18  | open: 1
+Сигналов:  18  | закрыто: 18  | open: 0
 Start:     $300.00
 Final:     $301.59  (+0.5%)
 Total R:   +0.6R
