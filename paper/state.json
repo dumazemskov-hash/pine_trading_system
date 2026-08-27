@@ -1,11 +1,11 @@
 {
-  "updated": "2026-08-27T06:50:42.881562+00:00",
+  "updated": "2026-08-27T10:36:51.928780+00:00",
   "mode": "DUMP-only",
   "primary_version": "dump-v0.2b",
   "start": 300.0,
-  "final_primary": 302.97,
-  "total_r_primary": 0.9,
-  "n_primary": 21,
+  "final_primary": 296.91,
+  "total_r_primary": -0.1,
+  "n_primary": 22,
   "max_dd_pct": 10.0,
   "trades_primary": [
     {
@@ -322,6 +322,21 @@
       "stop": 0.0041560500000000005,
       "tp1": 0.00384132,
       "tp2": 0.00367185
+    },
+    {
+      "time": "2026-08-27 09:00",
+      "symbol": "FF",
+      "body": 6.6,
+      "result": "STOP",
+      "bars": 3,
+      "r": -1.0,
+      "extra": "",
+      "version": "dump-v0.2b",
+      "primary": true,
+      "entry": 0.09616,
+      "stop": 0.0990448,
+      "tp1": 0.09154431999999998,
+      "tp2": 0.08750559999999998
     }
   ],
   "trades_legacy": []
