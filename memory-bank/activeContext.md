@@ -1,32 +1,25 @@
 # Активный контекст — Liquidity Raid Hunter
 
-## Текущий фокус (10.08.2026)
+## Текущий фокус (27.08.2026)
 
-Основной фокус — **сбор статистики и оценка качества сигналов v8.27**.
+Основная стратегия: **DUMP v0.2b** (живой сканер не трогаем).
 
-Multi-agent система на паузе из-за отсутствия бюджета на LLM API.
+Lab: confirm-gate «отмена если high(bar+1) ≥ orig stop».
+- LAB scanner пишет pending/confirmed/skip_bounce в `signals_dump_lab/`
+- BT: `python scanner/backtest_dump_gate.py` → `backtests/latest_dump_gate.txt`
+- Paper replay: `python scanner/paper_gate_replay.py`
 
-## Текущая версия
+Paper live v0.2b на 27.08: 22 сделки, $296.91 (−1.0%), 14 STOP / 5 TP / 3 BE.
+Оптимистичный гейт на тех же 22: take 13, +5.7R, ~$334 (+11.5%).
 
-- **Scanner**: v8.27 (на базе v8.26)
-- **Indicator**: v8.27 (синхронизирован)
-- Стоп: структурный + лимит риска 2%
-- Фильтры: VOLUME_RATIO=1.9, PRIOR_VOLUME=1.35, CONDITION_D=0.6
-- TP1=1.6R (50% + BE), TP2=3R
+## Живые параметры DUMP v0.2b
 
-### Изменения v8.26 → v8.27
-- MIN_ZONE_SCORE: 3 → **2** (точечное ослабление)
-- BREAK_ATR_MULT: 0.40 → **0.25** (менее глубокий пробой зоны)
+- body 6.5–9%, cpos≤0.35, vol≥3×MA20, pump window, sweep low
+- stop cap 3%, TP 1.6/3R, risk 2%, BE after TP1
+- cooldown 32, stop-cooldown 96
 
-## Главные боли (актуально)
+## Правила
 
-1. Качество сигналов (много низкокачественных без пампа) — частично ослаблено в v8.27 для большего количества сигналов
-2. Логика стопа (улучшена, нужна статистика)
-3. Расхождение сканера и индикатора (решено в v8.27)
-
-## Правила работы
-
-- Team Lead принимает финальные решения
-- Пользователь — поставщик данных и исполнитель
-- Все важные решения фиксируются в DecisionLog.md
-- GitHub = единая память проекта
+- Live DUMP не переписывать без 60d OOS по гейту
+- GitHub ветка dump = истина
+- RAID / RAID2 / DUMP-STRUCT = lab only
