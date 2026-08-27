@@ -8,12 +8,17 @@ import atexit
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-# === DUMP LAB Scanner — parallel to v0.2b ===
-# Same entry as v0.2b + SKIP Asia session UTC 00:00–05:59
+# === DUMP LAB Scanner — v0.2b + skip Asia + confirm gate ===
+# Live dump_scanner.py НЕ трогаем.
+# Гейт: сигнал становится pending. После закрытия bar+1:
+#   CANCEL если high(bar+1) >= original stop
+#   иначе CONFIRM с исходными entry/stop/TP
+# Оптимистичный fill (вход по close сигнала). Честные варианты — в backtest_dump_gate.py
 TELEGRAM_TOKEN = "8821282524:AAG7OKFKdzks0qy2WdqBi4gU2dV62Isp90k"
 CHAT_ID = "401292001"
 
 TIMEFRAME = "15m"
+BAR_MS = 15 * 60 * 1000
 MIN_BODY_PCT = 6.5
 MAX_BODY_PCT = 9.0
 PUMP_LOOKBACK = 6
@@ -28,7 +33,7 @@ SWEEP_LOOKBACK = 10
 TP1_RR = 1.6
 TP2_RR = 3.0
 CANDLES_TO_LOG = 40
-VERSION = "dump-lab-asia"
+VERSION = "dump-lab-gate"
 ASIA_HOUR_END = 6
 
 exchange = ccxt.bybit({
@@ -38,10 +43,12 @@ exchange = ccxt.bybit({
 
 sent_signals = set()
 last_signal_bar = {}
+pending = {}  # symbol -> dict
 
 ROOT = Path(__file__).resolve().parent.parent
 SIGNALS_DIR = ROOT / "signals_dump_lab"
 SIGNALS_DIR.mkdir(exist_ok=True)
+PENDING_PATH = SIGNALS_DIR / "pending.json"
 LOCK_PATH = ROOT / "scanner" / ".dump_scanner_lab.lock"
 _lock_fd = None
 
@@ -113,6 +120,28 @@ def acquire_lock():
     atexit.register(_clear)
 
 
+def load_pending():
+    if not PENDING_PATH.exists():
+        return
+    try:
+        data = json.loads(PENDING_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            pending.update(data)
+        print(f"LAB pending с диска: {len(pending)}")
+    except Exception as e:
+        print(f"LAB pending load: {e}")
+
+
+def save_pending():
+    try:
+        PENDING_PATH.write_text(
+            json.dumps(pending, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        print(f"LAB pending save: {e}")
+
+
 def load_sent_from_disk():
     loaded = 0
     for d in range(0, 3):
@@ -133,8 +162,9 @@ def load_sent_from_disk():
                 bar_ts = rec.get("bar_ts")
                 if sym is None or bar_ts is None:
                     continue
-                sid = f"{sym}_{bar_ts}"
+                sid = f"{sym}_{bar_ts}_{rec.get('status', '')}"
                 sent_signals.add(sid)
+                sent_signals.add(f"{sym}_{bar_ts}")
                 prev = last_signal_bar.get(sym)
                 if prev is None or bar_ts > prev:
                     last_signal_bar[sym] = bar_ts
@@ -150,7 +180,7 @@ def send_telegram(message: str):
         print(f"TG: {e}")
 
 
-def log_signal(signal, ohlcv, atr):
+def log_signal(signal, ohlcv, atr, status, extra=None):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     path = SIGNALS_DIR / f"{today}.jsonl"
     recent = [{
@@ -160,6 +190,7 @@ def log_signal(signal, ohlcv, atr):
     record = {
         "logged_at": datetime.now(timezone.utc).isoformat(),
         "version": VERSION,
+        "status": status,
         "symbol": signal["symbol"],
         "entry": signal["entry"], "stop": signal["stop"],
         "tp1": signal["tp1"], "tp2": signal["tp2"],
@@ -168,9 +199,11 @@ def log_signal(signal, ohlcv, atr):
         "body_pct": signal["body_pct"],
         "bar_ts": signal["bar_ts"],
         "atr": atr,
-        "filter": "skip_asia_utc0_5",
+        "filter": "skip_asia_utc0_5+gate_h1",
         "candles": recent,
     }
+    if extra:
+        record.update(extra)
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -255,14 +288,64 @@ def check_signal(symbol, ohlcv_raw):
     }
 
 
+def resolve_pending(symbol, ohlcv_raw):
+    pend = pending.get(symbol)
+    if not pend:
+        return
+    if len(ohlcv_raw) < 3:
+        return
+    closed = ohlcv_raw[:-1]
+    after = [c for c in closed if c[0] > pend["bar_ts"]]
+    if not after:
+        return
+    bar1 = after[0]
+    high1 = bar1[2]
+    stop = float(pend["stop"])
+    extra = {
+        "confirm_ts": bar1[0],
+        "high1": high1,
+        "close1": bar1[4],
+        "bounce_pct": round((high1 - pend["entry"]) / pend["entry"] * 100, 3) if pend["entry"] else None,
+    }
+    sid = f"{symbol}_{pend['bar_ts']}"
+    if high1 >= stop:
+        extra["reason"] = "high1>=orig_stop"
+        log_signal(pend, closed, pend.get("atr"), "skip_bounce", extra)
+        send_telegram(
+            f"DUMP LAB GATE SKIP | {symbol}\n"
+            f"high1 {high1:.6f} >= stop {stop:.6f}\n"
+            f"Body: {pend['body_pct']:.2f}%\n"
+            f"Mode: cancel bounce bar+1"
+        )
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] LAB SKIP bounce → {symbol}")
+    else:
+        log_signal(pend, closed, pend.get("atr"), "confirmed", extra)
+        rp = pend["risk"] / pend["entry"] * 100
+        send_telegram(
+            f"DUMP LAB GATE OK | {symbol}\n"
+            f"Entry: {pend['entry']:.6f}\n"
+            f"Stop:  {pend['stop']:.6f}\n"
+            f"TP1:   {pend['tp1']:.6f} | TP2: {pend['tp2']:.6f}\n"
+            f"Risk:  {rp:.2f}%\n"
+            f"Body:  {pend['body_pct']:.2f}%\n"
+            f"high1: {high1:.6f} < stop\n"
+            f"Mode:  confirm bar+1 | orig levels"
+        )
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] LAB CONFIRM → {symbol} | high1<{stop:.6f}")
+    sent_signals.add(sid)
+    pending.pop(symbol, None)
+    save_pending()
+
+
 def main():
     acquire_lock()
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] === DUMP LAB (skip Asia UTC0-5) ===")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] === DUMP LAB (skip Asia + gate h1) ===")
     print(
-        f"v0.2b + skip hour<6 | body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | "
-        f"vol>={VOLUME_RATIO}x | → signals_dump_lab/"
+        f"v0.2b + skip hour<6 + CANCEL if high(bar+1)>=stop | "
+        f"body {MIN_BODY_PCT}-{MAX_BODY_PCT}% | vol>={VOLUME_RATIO}x | → signals_dump_lab/"
     )
     load_sent_from_disk()
+    load_pending()
     symbols = get_symbols()
     while True:
         try:
@@ -273,6 +356,9 @@ def main():
         for symbol in symbols:
             try:
                 ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=90)
+                if symbol in pending:
+                    resolve_pending(symbol, ohlcv)
+                    continue
                 signal = check_signal(symbol, ohlcv)
                 if signal is None:
                     continue
@@ -281,26 +367,16 @@ def main():
                     continue
                 last_ts = last_signal_bar.get(symbol)
                 if last_ts is not None:
-                    if (signal["bar_ts"] - last_ts) / (15 * 60 * 1000) < COOLDOWN_BARS:
+                    if (signal["bar_ts"] - last_ts) / BAR_MS < COOLDOWN_BARS:
                         continue
-                sent_signals.add(sid)
                 last_signal_bar[symbol] = signal["bar_ts"]
-                log_signal(signal, signal["ohlcv_closed"], signal.get("atr"))
-                rp = signal["risk"] / signal["entry"] * 100
-                msg = (
-                    f"DUMP LAB asia | {symbol}\n"
-                    f"Entry: {signal['entry']:.6f}\n"
-                    f"Stop:  {signal['stop']:.6f}\n"
-                    f"TP1:   {signal['tp1']:.6f} | TP2: {signal['tp2']:.6f}\n"
-                    f"Risk:  {rp:.2f}%\n"
-                    f"Body:  {signal['body_pct']:.2f}%\n"
-                    f"HourUTC: {signal.get('hour_utc')}\n"
-                    f"Mode:  lab skip-asia"
-                )
-                send_telegram(msg)
+                store = {k: v for k, v in signal.items() if k != "ohlcv_closed"}
+                pending[symbol] = store
+                save_pending()
+                log_signal(signal, signal["ohlcv_closed"], signal.get("atr"), "pending")
                 print(
-                    f"[{datetime.now().strftime('%H:%M:%S')}] LAB → {symbol} | "
-                    f"body={signal['body_pct']:.1f}% h={signal.get('hour_utc')}"
+                    f"[{datetime.now().strftime('%H:%M:%S')}] LAB pending → {symbol} | "
+                    f"body={signal['body_pct']:.1f}% wait bar+1"
                 )
             except Exception:
                 pass
