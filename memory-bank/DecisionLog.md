@@ -1,5 +1,46 @@
 # Decision Log — Liquidity Raid Hunter
 
+## 28.08.2026 — DUMP hyp1 BT60d: фильтры/входы PDF закрыты, в live НЕ переносить
+
+**Результат** `latest_dump_hyp.txt` (150 символов, 60d, live untouched):
+
+| mode | N | WR | AvgR | OOS AvgR | 1-bar | funnel |
+|---|---|---|---|---|---|---|
+| base | 28 | 35.7% | +0.60 | −0.27 (N=7) | 9/13 (69%) | TAKE=28 |
+| prelow | 25 | 32.0% | +0.53 | −0.70 WR0% | 8 (67%) | NOACCEPT=3 |
+| deep | 25 | 32.0% | +0.53 | −0.70 WR0% | 8 (67%) | NOACCEPT=1 SHALLOW=2 |
+| deep_loose | 25 | 32.0% | +0.53 | −0.70 WR0% | 8 (67%) | NOACCEPT=2 SHALLOW=1 |
+| volcap6 | 25 | 32.0% | +0.53 | −0.15 | 8 (67%) | VOLCAP=3 |
+| volcap8 | 25 | 32.0% | +0.53 | −0.15 | 8 (67%) | VOLCAP=3 |
+| retest | 8 | 0.0% | −0.55 | −1.00 | 3 (50%) | NOFILL=20 stop 6.5% |
+| break | 15 | 26.7% | +0.14 | +0.80 N=3 | 1 (12%) | NOFILL=11 stop 11% IS −0.03R |
+
+**Решение:** ни один вариант не в live. Семья prelow/deep/volcap/retest/break закрыта.
+
+**Почему:**
+- prelow / deep / deep_loose / volcap6 / volcap8 срезали одни и те же ~3 сделки. 1-bar остался ~67%. OOS у prelow/deep хуже базы (WR 0%, −0.70R).
+- volcap чуть мягче по OOS (−0.15 vs −0.27), но IS тоже хуже (+0.74 vs +0.89) — отрезал победителей, не стопы.
+- retest не заполняется (20/28 NOFILL), WR 0%.
+- break режет 1-bar ценой стопа 11% и отрицательным IS. OOS N=3 — шум.
+
+**Дальше:** hyp2 — оси Клода, которых не было в этом прогоне: skip_asia, pump_clean, vol_vs_pump, sweep 1.5%. Split-entry не открываем, пока не закрыты дешёвые фильтры.
+
+**Статус:** принято. Live `dump_scanner.py` v0.2b не меняем.
+
+---
+
+## 28.08.2026 — DUMP failed-reclaim BT60d: в live НЕ переносить
+
+**Результат** reclaim 60d:
+- base N=28 +0.60R OOS −0.27R
+- rec_open TAKE=2/28 (SWEPT8 TIMEOUT11 MISS7) −0.10R
+- rec_close N=17 +0.14R OOS −0.18R ≈ gate_f
+- rec_open_dh TAKE=2 −1.00R
+
+**Решение:** reclaim-семья закрыта. Не промоутить.
+
+---
+
 ## 27.08.2026 — DUMP confirm-gate BT60d: в live НЕ переносить
 
 **Результат** `bt_DUMP_GATE_2026-08-27_1107`:

@@ -1,16 +1,20 @@
 # Активный контекст — Liquidity Raid Hunter
 
-## Текущий фокус (27.08.2026)
+## Текущий фокус (28.08.2026)
 
 Основная стратегия: **DUMP v0.2b** (живой сканер не трогаем).
 
-Lab: confirm-gate «отмена если high(bar+1) ≥ orig stop».
-- LAB scanner пишет pending/confirmed/skip_bounce в `signals_dump_lab/`
-- BT: `python scanner/backtest_dump_gate.py` → `backtests/latest_dump_gate.txt`
-- Paper replay: `python scanner/paper_gate_replay.py`
+Закрыто без промоута:
+- confirm-gate (opt = lookahead, honest fill убивает край)
+- failed-reclaim (rec_open не заполняется, rec_close ≈ gate_f)
+- hyp1 PDF: prelow / deep / volcap / retest / break
 
-Paper live v0.2b на 27.08: 22 сделки, $296.91 (−1.0%), 14 STOP / 5 TP / 3 BE.
-Оптимистичный гейт на тех же 22: take 13, +5.7R, ~$334 (+11.5%).
+Сейчас lab: **hyp2** — оси Клода на close t.
+- `python scanner/backtest_dump_hyp2.py`
+- варианты: skip_asia / pump_clean / pump_clean1 / volpump1 / volpump08 / sweep15
+- отчёт: `backtests/latest_dump_hyp2.txt`
+
+Split-entry 40/60 не открываем, пока не закрыты эти фильтры.
 
 ## Живые параметры DUMP v0.2b
 
@@ -20,6 +24,6 @@ Paper live v0.2b на 27.08: 22 сделки, $296.91 (−1.0%), 14 STOP / 5 TP 
 
 ## Правила
 
-- Live DUMP не переписывать без 60d OOS по гейту
+- Live DUMP не переписывать без честного 60d OOS
 - GitHub ветка dump = истина
 - RAID / RAID2 / DUMP-STRUCT = lab only
