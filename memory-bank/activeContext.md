@@ -8,13 +8,12 @@
 - confirm-gate (opt = lookahead, honest fill убивает край)
 - failed-reclaim (rec_open не заполняется, rec_close ≈ gate_f)
 - hyp1 PDF: prelow / deep / volcap / retest / break
+- hyp2 Claude-on-t: skip_asia / pump_clean / vol_vs_pump / sweep15
 
-Сейчас lab: **hyp2** — оси Клода на close t.
-- `python scanner/backtest_dump_hyp2.py`
-- варианты: skip_asia / pump_clean / pump_clean1 / volpump1 / volpump08 / sweep15
-- отчёт: `backtests/latest_dump_hyp2.txt`
-
-Split-entry 40/60 не открываем, пока не закрыты эти фильтры.
+Сейчас lab: **split-entry** (размер, не фильтр).
+- `python scanner/backtest_dump_split.py`
+- base / split4060 / split5050 / leg1only40
+- отчёт: `backtests/latest_dump_split.txt`
 
 ## Живые параметры DUMP v0.2b
 
