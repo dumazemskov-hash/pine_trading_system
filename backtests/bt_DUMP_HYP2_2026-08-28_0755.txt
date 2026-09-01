@@ -1,0 +1,124 @@
+DUMP hyp2 | 2026-08-28_0754 UTC
+Days=60 | symbols=150
+base        = live v0.2b
+skip_asia   = hour UTC < 6 (как dump_scanner_lab)
+pump_clean  = skip if down_bars >= 2 in pump window
+pump_clean1 = skip if down_bars >= 1
+volpump1    = vol[t] / max(vol pump) >= 1.0
+volpump08   = vol[t] / max(vol pump) >= 0.8
+sweep15     = sweep_depth >= 1.5%
+
+================================================================
+SUMMARY | DUMP-HYP2 base
+cfg={'mode': 'base'} | 60d | live untouched
+funnel dump=28 TAKE=28 
+================================================================
+--- FULL ---
+N=28 WR=35.7% 1-bar=9(69%) avg_stop=3.00%
+Final $412.99 (+37.7%) AvgR +0.60 MaxDD 7.8%
+STOP=13 TP1+TP2=6 TP2=4 TP1=0 BE=5 OPEN=0
+--- IS (first 2/3) ---
+N=21 WR=42.9% 1-bar=7(88%) avg_stop=3.00%
+Final $429.92 (+43.3%) AvgR +0.89 MaxDD 5.9%
+STOP=8 TP1+TP2=5 TP2=4 TP1=0 BE=4 OPEN=0
+--- OOS (last 1/3) ---
+N=7 WR=14.3% 1-bar=2(40%) avg_stop=3.00%
+Final $288.19 (-3.9%) AvgR -0.27 MaxDD 5.9%
+STOP=5 TP1+TP2=1 TP2=0 TP1=0 BE=1 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP2 skip_asia
+cfg={'mode': 'base', 'skip_asia': True} | 60d | live untouched
+funnel dump=28 TAKE=16 ASIA=12
+================================================================
+--- FULL ---
+N=16 WR=43.8% 1-bar=4(80%) avg_stop=3.00%
+Final $411.97 (+37.3%) AvgR +1.03 MaxDD 4.4%
+STOP=5 TP1+TP2=4 TP2=3 TP1=0 BE=4 OPEN=0
+--- IS (first 2/3) ---
+N=13 WR=53.8% 1-bar=3(100%) avg_stop=3.00%
+Final $422.21 (+40.7%) AvgR +1.35 MaxDD 2.0%
+STOP=3 TP1+TP2=4 TP2=3 TP1=0 BE=3 OPEN=0
+--- OOS (last 1/3) ---
+N=3 WR=0.0% 1-bar=1(50%) avg_stop=3.00%
+Final $292.73 (-2.4%) AvgR -0.40 MaxDD 2.4%
+STOP=2 TP1+TP2=0 TP2=0 TP1=0 BE=1 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP2 pump_clean
+cfg={'mode': 'base', 'max_down': 2} | 60d | live untouched
+funnel dump=28 TAKE=0 SAW=28
+================================================================
+--- FULL ---
+Сделок нет
+--- IS (first 2/3) ---
+Сделок нет
+--- OOS (last 1/3) ---
+Сделок нет
+
+================================================================
+SUMMARY | DUMP-HYP2 pump_clean1
+cfg={'mode': 'base', 'max_down': 1} | 60d | live untouched
+funnel dump=28 TAKE=0 SAW=28
+================================================================
+--- FULL ---
+Сделок нет
+--- IS (first 2/3) ---
+Сделок нет
+--- OOS (last 1/3) ---
+Сделок нет
+
+================================================================
+SUMMARY | DUMP-HYP2 volpump1
+cfg={'mode': 'base', 'min_vol_vs_pump': 1.0} | 60d | live untouched
+funnel dump=28 TAKE=17 QUIET=11
+================================================================
+--- FULL ---
+N=17 WR=35.3% 1-bar=5(56%) avg_stop=3.00%
+Final $347.28 (+15.8%) AvgR +0.46 MaxDD 13.2%
+STOP=9 TP1+TP2=4 TP2=2 TP1=0 BE=2 OPEN=0
+--- IS (first 2/3) ---
+N=12 WR=50.0% 1-bar=3(75%) avg_stop=3.00%
+Final $384.19 (+28.1%) AvgR +1.07 MaxDD 4.0%
+STOP=4 TP1+TP2=4 TP2=2 TP1=0 BE=2 OPEN=0
+--- OOS (last 1/3) ---
+N=5 WR=0.0% 1-bar=2(40%) avg_stop=3.00%
+Final $271.18 (-9.6%) AvgR -1.00 MaxDD 9.6%
+STOP=5 TP1+TP2=0 TP2=0 TP1=0 BE=0 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP2 volpump08
+cfg={'mode': 'base', 'min_vol_vs_pump': 0.8} | 60d | live untouched
+funnel dump=28 TAKE=22 QUIET=6
+================================================================
+--- FULL ---
+N=22 WR=31.8% 1-bar=8(67%) avg_stop=3.00%
+Final $352.01 (+17.3%) AvgR +0.39 MaxDD 13.2%
+STOP=12 TP1+TP2=4 TP2=3 TP1=0 BE=3 OPEN=0
+--- IS (first 2/3) ---
+N=17 WR=41.2% 1-bar=6(86%) avg_stop=3.00%
+Final $389.43 (+29.8%) AvgR +0.80 MaxDD 4.0%
+STOP=7 TP1+TP2=4 TP2=3 TP1=0 BE=3 OPEN=0
+--- OOS (last 1/3) ---
+N=5 WR=0.0% 1-bar=2(40%) avg_stop=3.00%
+Final $271.18 (-9.6%) AvgR -1.00 MaxDD 9.6%
+STOP=5 TP1+TP2=0 TP2=0 TP1=0 BE=0 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP2 sweep15
+cfg={'mode': 'base', 'sweep_depth': 0.015} | 60d | live untouched
+funnel dump=28 TAKE=25 SHALLOW=3
+================================================================
+--- FULL ---
+N=25 WR=36.0% 1-bar=8(73%) avg_stop=3.00%
+Final $411.11 (+37.0%) AvgR +0.66 MaxDD 10.0%
+STOP=11 TP1+TP2=5 TP2=4 TP1=0 BE=5 OPEN=0
+--- IS (first 2/3) ---
+N=20 WR=45.0% 1-bar=6(86%) avg_stop=3.00%
+Final $438.69 (+46.2%) AvgR +0.99 MaxDD 5.9%
+STOP=7 TP1+TP2=5 TP2=4 TP1=0 BE=4 OPEN=0
+--- OOS (last 1/3) ---
+N=5 WR=0.0% 1-bar=2(50%) avg_stop=3.00%
+Final $281.14 (-6.3%) AvgR -0.64 MaxDD 6.3%
+STOP=4 TP1+TP2=0 TP2=0 TP1=0 BE=1 OPEN=0
+

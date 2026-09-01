@@ -1,0 +1,78 @@
+VAL-FADE | 2026-08-28_0903 UTC
+Days=60 | symbols=148 | risk=1%
+Отдельная стратегия. dump_scanner.py не менялся.
+Профиль: 20 корзин, HVN>=70% пика, нужно >=2 кластера.
+Вход: медвежий close над верхним HVN, high не выше high импульса.
+
+================================================================
+SUMMARY | VAL-FADE w8_tight
+cfg={'window': 8, 'stop': 'tight'} | 60d | risk 1% | DUMP live untouched
+funnel scan=563538 TAKE=78 NOPROF=561396 NOFADE=2024 WIDE=2 TINY=38
+================================================================
+--- FULL ---
+N=78 WR=19.2% 1-bar=21(45%) avg_stop=2.02% avg_TP1=1.70R avg_TP2=4.22R
+Final $303.94 (+1.3%) AvgR +0.03 MaxDD 9.6%
+STOP=47 TP1+TP2=14 TP2=1 TP1=0 BE=16 OPEN=0
+--- IS (first 2/3) ---
+N=46 WR=21.7% 1-bar=17(59%) avg_stop=1.96% avg_TP1=1.68R avg_TP2=4.45R
+Final $295.95 (-1.3%) AvgR -0.02 MaxDD 7.8%
+STOP=29 TP1+TP2=10 TP2=0 TP1=0 BE=7 OPEN=0
+--- OOS (last 1/3) ---
+N=32 WR=15.6% 1-bar=4(22%) avg_stop=2.10% avg_TP1=1.74R avg_TP2=3.89R
+Final $308.09 (+2.7%) AvgR +0.09 MaxDD 6.3%
+STOP=18 TP1+TP2=4 TP2=1 TP1=0 BE=9 OPEN=0
+
+================================================================
+SUMMARY | VAL-FADE w8_struct
+cfg={'window': 8, 'stop': 'struct'} | 60d | risk 1% | DUMP live untouched
+funnel scan=565746 TAKE=46 NOPROF=563519 NOFADE=2104 WIDE=1 TINY=76
+================================================================
+--- FULL ---
+N=46 WR=19.6% 1-bar=11(39%) avg_stop=2.68% avg_TP1=1.63R avg_TP2=3.56R
+Final $291.71 (-2.8%) AvgR -0.05 MaxDD 9.3%
+STOP=28 TP1+TP2=8 TP2=1 TP1=0 BE=9 OPEN=0
+--- IS (first 2/3) ---
+N=27 WR=29.6% 1-bar=10(62%) avg_stop=2.67% avg_TP1=1.62R avg_TP2=3.91R
+Final $308.89 (+3.0%) AvgR +0.12 MaxDD 4.3%
+STOP=16 TP1+TP2=8 TP2=0 TP1=0 BE=3 OPEN=0
+--- OOS (last 1/3) ---
+N=19 WR=5.3% 1-bar=1(8%) avg_stop=2.69% avg_TP1=1.63R avg_TP2=3.06R
+Final $283.32 (-5.6%) AvgR -0.30 MaxDD 5.9%
+STOP=12 TP1+TP2=0 TP2=1 TP1=0 BE=6 OPEN=0
+
+================================================================
+SUMMARY | VAL-FADE w16_tight
+cfg={'window': 16, 'stop': 'tight'} | 60d | risk 1% | DUMP live untouched
+funnel scan=548649 TAKE=279 NOPROF=543410 NOFADE=4848 WIDE=3 TINY=109
+================================================================
+--- FULL ---
+N=279 WR=14.7% 1-bar=87(47%) avg_stop=1.73% avg_TP1=2.11R avg_TP2=5.18R
+Final $274.41 (-8.5%) AvgR -0.02 MaxDD 30.7%
+STOP=185 TP1+TP2=33 TP2=8 TP1=0 BE=53 OPEN=0
+--- IS (first 2/3) ---
+N=144 WR=15.3% 1-bar=48(48%) avg_stop=1.72% avg_TP1=2.28R avg_TP2=5.42R
+Final $279.26 (-6.9%) AvgR -0.03 MaxDD 21.9%
+STOP=100 TP1+TP2=19 TP2=3 TP1=0 BE=22 OPEN=0
+--- OOS (last 1/3) ---
+N=135 WR=14.1% 1-bar=39(46%) avg_stop=1.75% avg_TP1=1.93R avg_TP2=4.93R
+Final $294.78 (-1.7%) AvgR -0.00 MaxDD 18.3%
+STOP=85 TP1+TP2=14 TP2=5 TP1=0 BE=31 OPEN=0
+
+================================================================
+SUMMARY | VAL-FADE w16_struct
+cfg={'window': 16, 'stop': 'struct'} | 60d | risk 1% | DUMP live untouched
+funnel scan=553495 TAKE=218 NOPROF=547721 NOFADE=5347 WIDE=2 TINY=207
+================================================================
+--- FULL ---
+N=218 WR=15.6% 1-bar=41(30%) avg_stop=2.38% avg_TP1=1.80R avg_TP2=4.07R
+Final $248.26 (-17.2%) AvgR -0.08 MaxDD 26.8%
+STOP=138 TP1+TP2=28 TP2=6 TP1=0 BE=46 OPEN=0
+--- IS (first 2/3) ---
+N=118 WR=16.1% 1-bar=27(33%) avg_stop=2.25% avg_TP1=1.93R avg_TP2=4.35R
+Final $242.99 (-19.0%) AvgR -0.17 MaxDD 20.5%
+STOP=82 TP1+TP2=16 TP2=3 TP1=0 BE=17 OPEN=0
+--- OOS (last 1/3) ---
+N=100 WR=15.0% 1-bar=14(25%) avg_stop=2.53% avg_TP1=1.64R avg_TP2=3.75R
+Final $306.50 (+2.2%) AvgR +0.03 MaxDD 11.4%
+STOP=56 TP1+TP2=12 TP2=3 TP1=0 BE=29 OPEN=0
+

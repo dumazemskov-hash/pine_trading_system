@@ -1,0 +1,154 @@
+DUMP hyp | 2026-08-28_0740 UTC
+Days=60 | symbols=150
+base       = live v0.2b
+prelow     = close < pre_low * 0.9985
+deep       = sweep>=0.40% AND close < pre_low * 0.999
+deep_loose = sweep>=0.25% AND close <= pre_low
+volcap6/8  = 3x <= volx <= 6/8
+retest     = limit at 35% retrace close→high, bar+1 only, stop=high+0.15ATR
+break      = sell-stop low-0.10ATR, bar+1 only, stop=max(high,entry*1.03)
+
+================================================================
+SUMMARY | DUMP-HYP base
+cfg={'mode': 'base'} | 60d | live untouched
+funnel dump=28 TAKE=28 
+================================================================
+--- FULL ---
+N=28 WR=35.7% 1-bar=9(69%) avg_stop=3.00%
+Final $412.99 (+37.7%) AvgR +0.60 MaxDD 7.8%
+STOP=13 TP1+TP2=6 TP2=4 TP1=0 BE=5 OPEN=0
+--- IS (first 2/3) ---
+N=21 WR=42.9% 1-bar=7(88%) avg_stop=3.00%
+Final $429.92 (+43.3%) AvgR +0.89 MaxDD 5.9%
+STOP=8 TP1+TP2=5 TP2=4 TP1=0 BE=4 OPEN=0
+--- OOS (last 1/3) ---
+N=7 WR=14.3% 1-bar=2(40%) avg_stop=3.00%
+Final $288.19 (-3.9%) AvgR -0.27 MaxDD 5.9%
+STOP=5 TP1+TP2=1 TP2=0 TP1=0 BE=1 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP prelow
+cfg={'mode': 'base', 'prelow_break': 0.0015} | 60d | live untouched
+funnel dump=28 TAKE=25 NOACCEPT=3
+================================================================
+--- FULL ---
+N=25 WR=32.0% 1-bar=8(67%) avg_stop=3.00%
+Final $385.17 (+28.4%) AvgR +0.53 MaxDD 11.8%
+STOP=12 TP1+TP2=4 TP2=4 TP1=0 BE=5 OPEN=0
+--- IS (first 2/3) ---
+N=19 WR=42.1% 1-bar=6(86%) avg_stop=3.00%
+Final $419.40 (+39.8%) AvgR +0.92 MaxDD 5.9%
+STOP=7 TP1+TP2=4 TP2=4 TP1=0 BE=4 OPEN=0
+--- OOS (last 1/3) ---
+N=6 WR=0.0% 1-bar=2(40%) avg_stop=3.00%
+Final $275.52 (-8.2%) AvgR -0.70 MaxDD 8.2%
+STOP=5 TP1+TP2=0 TP2=0 TP1=0 BE=1 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP deep
+cfg={'mode': 'base', 'prelow_break': 0.001, 'sweep_depth': 0.004} | 60d | live untouched
+funnel dump=28 TAKE=25 NOACCEPT=1 SHALLOW=2
+================================================================
+--- FULL ---
+N=25 WR=32.0% 1-bar=8(67%) avg_stop=3.00%
+Final $385.17 (+28.4%) AvgR +0.53 MaxDD 11.8%
+STOP=12 TP1+TP2=4 TP2=4 TP1=0 BE=5 OPEN=0
+--- IS (first 2/3) ---
+N=19 WR=42.1% 1-bar=6(86%) avg_stop=3.00%
+Final $419.40 (+39.8%) AvgR +0.92 MaxDD 5.9%
+STOP=7 TP1+TP2=4 TP2=4 TP1=0 BE=4 OPEN=0
+--- OOS (last 1/3) ---
+N=6 WR=0.0% 1-bar=2(40%) avg_stop=3.00%
+Final $275.52 (-8.2%) AvgR -0.70 MaxDD 8.2%
+STOP=5 TP1+TP2=0 TP2=0 TP1=0 BE=1 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP deep_loose
+cfg={'mode': 'base', 'prelow_break': 0.0, 'sweep_depth': 0.0025} | 60d | live untouched
+funnel dump=28 TAKE=25 NOACCEPT=2 SHALLOW=1
+================================================================
+--- FULL ---
+N=25 WR=32.0% 1-bar=8(67%) avg_stop=3.00%
+Final $385.17 (+28.4%) AvgR +0.53 MaxDD 11.8%
+STOP=12 TP1+TP2=4 TP2=4 TP1=0 BE=5 OPEN=0
+--- IS (first 2/3) ---
+N=19 WR=42.1% 1-bar=6(86%) avg_stop=3.00%
+Final $419.40 (+39.8%) AvgR +0.92 MaxDD 5.9%
+STOP=7 TP1+TP2=4 TP2=4 TP1=0 BE=4 OPEN=0
+--- OOS (last 1/3) ---
+N=6 WR=0.0% 1-bar=2(40%) avg_stop=3.00%
+Final $275.52 (-8.2%) AvgR -0.70 MaxDD 8.2%
+STOP=5 TP1+TP2=0 TP2=0 TP1=0 BE=1 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP volcap6
+cfg={'mode': 'base', 'vmax': 6.0} | 60d | live untouched
+funnel dump=28 TAKE=25 VOLCAP=3
+================================================================
+--- FULL ---
+N=25 WR=32.0% 1-bar=8(67%) avg_stop=3.00%
+Final $385.17 (+28.4%) AvgR +0.53 MaxDD 5.9%
+STOP=12 TP1+TP2=4 TP2=4 TP1=0 BE=5 OPEN=0
+--- IS (first 2/3) ---
+N=19 WR=36.8% 1-bar=7(88%) avg_stop=3.00%
+Final $392.94 (+31.0%) AvgR +0.74 MaxDD 5.9%
+STOP=8 TP1+TP2=3 TP2=4 TP1=0 BE=4 OPEN=0
+--- OOS (last 1/3) ---
+N=6 WR=16.7% 1-bar=1(25%) avg_stop=3.00%
+Final $294.07 (-2.0%) AvgR -0.15 MaxDD 5.9%
+STOP=4 TP1+TP2=1 TP2=0 TP1=0 BE=1 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP volcap8
+cfg={'mode': 'base', 'vmax': 8.0} | 60d | live untouched
+funnel dump=28 TAKE=25 VOLCAP=3
+================================================================
+--- FULL ---
+N=25 WR=32.0% 1-bar=8(67%) avg_stop=3.00%
+Final $385.17 (+28.4%) AvgR +0.53 MaxDD 5.9%
+STOP=12 TP1+TP2=4 TP2=4 TP1=0 BE=5 OPEN=0
+--- IS (first 2/3) ---
+N=19 WR=36.8% 1-bar=7(88%) avg_stop=3.00%
+Final $392.94 (+31.0%) AvgR +0.74 MaxDD 5.9%
+STOP=8 TP1+TP2=3 TP2=4 TP1=0 BE=4 OPEN=0
+--- OOS (last 1/3) ---
+N=6 WR=16.7% 1-bar=1(25%) avg_stop=3.00%
+Final $294.07 (-2.0%) AvgR -0.15 MaxDD 5.9%
+STOP=4 TP1+TP2=1 TP2=0 TP1=0 BE=1 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP retest
+cfg={'mode': 'retest', 'retrace': 0.35, 'stop_atr': 0.15, 'max_stop_pct': 0.12} | 60d | live untouched
+funnel dump=28 TAKE=8 NOFILL=20
+================================================================
+--- FULL ---
+N=8 WR=0.0% 1-bar=3(50%) avg_stop=6.54%
+Final $274.32 (-8.6%) AvgR -0.55 MaxDD 8.6%
+STOP=6 TP1+TP2=0 TP2=0 TP1=0 BE=2 OPEN=0
+--- IS (first 2/3) ---
+N=6 WR=0.0% 1-bar=2(50%) avg_stop=6.68%
+Final $285.64 (-4.8%) AvgR -0.40 MaxDD 4.8%
+STOP=4 TP1+TP2=0 TP2=0 TP1=0 BE=2 OPEN=0
+--- OOS (last 1/3) ---
+N=2 WR=0.0% 1-bar=1(50%) avg_stop=6.14%
+Final $288.12 (-4.0%) AvgR -1.00 MaxDD 4.0%
+STOP=2 TP1+TP2=0 TP2=0 TP1=0 BE=0 OPEN=0
+
+================================================================
+SUMMARY | DUMP-HYP break
+cfg={'mode': 'break', 'atr_under': 0.1, 'max_stop_pct': 0.15} | 60d | live untouched
+funnel dump=27 TAKE=15 NOFILL=11 WIDE=1
+================================================================
+--- FULL ---
+N=15 WR=26.7% 1-bar=1(12%) avg_stop=11.09%
+Final $311.17 (+3.7%) AvgR +0.14 MaxDD 11.8%
+STOP=8 TP1+TP2=3 TP2=0 TP1=1 BE=2 OPEN=1
+--- IS (first 2/3) ---
+N=12 WR=25.0% 1-bar=1(12%) avg_stop=11.33%
+Final $296.77 (-1.1%) AvgR -0.03 MaxDD 11.8%
+STOP=8 TP1+TP2=3 TP2=0 TP1=0 BE=1 OPEN=0
+--- OOS (last 1/3) ---
+N=3 WR=33.3% 1-bar=0(0%) avg_stop=10.12%
+Final $314.55 (+4.9%) AvgR +0.80 MaxDD 0.0%
+STOP=0 TP1+TP2=0 TP2=0 TP1=1 BE=1 OPEN=1
+

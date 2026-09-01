@@ -1,0 +1,78 @@
+DUMP confirm-gate | 2026-08-27_1107 UTC
+Days=60 | symbols=147 | CANCEL if high1>=orig_stop
+gate_opt = orig levels (optimistic fill)
+gate_f   = entry=close1, stop=orig (honest)
+gate_new = entry=close1, stop=3% new (honest)
+
+================================================================
+SUMMARY | DUMP-GATE base
+mode=base | 60d | skip_asia=False | live untouched
+gate-skips (approx, per-sym cooldown): 0
+================================================================
+--- FULL ---
+N=26 WR=34.6% 1-bar=9(82%) avg_stop=3.00%
+Final $417.69 (+39.2%) AvgR +0.67 MaxDD 7.8%
+STOP=11 TP1+TP2=5 TP2=4 TP1=0 BE=6 OPEN=0
+--- IS (first 2/3) ---
+N=19 WR=42.1% 1-bar=6(86%) avg_stop=3.00%
+Final $419.40 (+39.8%) AvgR +0.92 MaxDD 5.9%
+STOP=7 TP1+TP2=4 TP2=4 TP1=0 BE=4 OPEN=0
+--- OOS (last 1/3) ---
+N=7 WR=14.3% 1-bar=3(75%) avg_stop=3.00%
+Final $298.78 (-0.4%) AvgR -0.01 MaxDD 5.9%
+STOP=4 TP1+TP2=1 TP2=0 TP1=0 BE=2 OPEN=0
+
+================================================================
+SUMMARY | DUMP-GATE gate_opt
+mode=gate_opt | 60d | skip_asia=False | live untouched
+gate-skips (approx, per-sym cooldown): 9
+================================================================
+--- FULL ---
+N=17 WR=52.9% 1-bar=0(0%) avg_stop=3.00%
+Final $500.98 (+67.0%) AvgR +1.55 MaxDD 2.0%
+STOP=2 TP1+TP2=5 TP2=4 TP1=0 BE=6 OPEN=0
+--- IS (first 2/3) ---
+N=13 WR=61.5% 1-bar=0(0%) avg_stop=3.00%
+Final $473.45 (+57.8%) AvgR +1.80 MaxDD 2.0%
+STOP=1 TP1+TP2=4 TP2=4 TP1=0 BE=4 OPEN=0
+--- OOS (last 1/3) ---
+N=4 WR=25.0% 1-bar=0(0%) avg_stop=3.00%
+Final $317.44 (+5.8%) AvgR +0.72 MaxDD 2.0%
+STOP=1 TP1+TP2=1 TP2=0 TP1=0 BE=2 OPEN=0
+
+================================================================
+SUMMARY | DUMP-GATE gate_f
+mode=gate_f | 60d | skip_asia=False | live untouched
+gate-skips (approx, per-sym cooldown): 8
+================================================================
+--- FULL ---
+N=17 WR=23.5% 1-bar=2(22%) avg_stop=6.43%
+Final $318.23 (+6.1%) AvgR +0.19 MaxDD 7.1%
+STOP=9 TP1+TP2=3 TP2=1 TP1=0 BE=3 OPEN=1
+--- IS (first 2/3) ---
+N=13 WR=23.1% 1-bar=1(14%) avg_stop=6.73%
+Final $316.78 (+5.6%) AvgR +0.23 MaxDD 7.1%
+STOP=7 TP1+TP2=2 TP2=1 TP1=0 BE=3 OPEN=0
+--- OOS (last 1/3) ---
+N=4 WR=25.0% 1-bar=1(50%) avg_stop=5.43%
+Final $301.37 (+0.5%) AvgR +0.07 MaxDD 2.0%
+STOP=2 TP1+TP2=1 TP2=0 TP1=0 BE=0 OPEN=1
+
+================================================================
+SUMMARY | DUMP-GATE gate_new
+mode=gate_new | 60d | skip_asia=False | live untouched
+gate-skips (approx, per-sym cooldown): 8
+================================================================
+--- FULL ---
+N=17 WR=17.6% 1-bar=8(67%) avg_stop=3.00%
+Final $281.83 (-6.1%) AvgR -0.16 MaxDD 9.6%
+STOP=12 TP1+TP2=2 TP2=1 TP1=0 BE=2 OPEN=0
+--- IS (first 2/3) ---
+N=13 WR=23.1% 1-bar=6(75%) avg_stop=3.00%
+Final $305.55 (+1.9%) AvgR +0.09 MaxDD 6.3%
+STOP=8 TP1+TP2=2 TP2=1 TP1=0 BE=2 OPEN=0
+--- OOS (last 1/3) ---
+N=4 WR=0.0% 1-bar=2(50%) avg_stop=3.00%
+Final $276.71 (-7.8%) AvgR -1.00 MaxDD 7.8%
+STOP=4 TP1+TP2=0 TP2=0 TP1=0 BE=0 OPEN=0
+

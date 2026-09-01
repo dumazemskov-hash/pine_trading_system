@@ -1,0 +1,76 @@
+VAL-FADE2 | 2026-08-28_0948 UTC
+Days=60 | symbols=148 | risk=1%
+swing lookback 96/192 + vol shock 1.5x. dump_scanner.py не менялся.
+
+================================================================
+SUMMARY | VAL-FADE2 lb96_tight
+cfg={'lb': 96, 'min_range': 0.1, 'stop': 'tight'} shock=1.5 hold=6 | 60d | risk 1% | DUMP live untouched
+funnel scan=514755 TAKE=403 NOSHOCK=410316 NOIMP=72948 NOPROF=20691 NOFADE=10160 WIDE=11 NOTP=55 TINY=171
+================================================================
+--- FULL ---
+N=403 WR=7.4% 1-bar=99(33%) avg_stop=1.28% avg_TP1=3.96R avg_TP2=10.12R
+Final $134.74 (-55.1%) AvgR -0.18 MaxDD 63.9%
+STOP=299 TP1+TP2=26 TP2=1 TP1=3 BE=74 OPEN=0
+--- IS (first 2/3) ---
+N=179 WR=8.9% 1-bar=42(33%) avg_stop=1.40% avg_TP1=4.16R avg_TP2=9.57R
+Final $252.65 (-15.8%) AvgR -0.07 MaxDD 32.2%
+STOP=129 TP1+TP2=16 TP2=0 TP1=0 BE=34 OPEN=0
+--- OOS (last 1/3) ---
+N=224 WR=6.2% 1-bar=57(34%) avg_stop=1.19% avg_TP1=3.80R avg_TP2=10.56R
+Final $159.99 (-46.7%) AvgR -0.27 MaxDD 49.6%
+STOP=170 TP1+TP2=10 TP2=1 TP1=3 BE=40 OPEN=0
+
+================================================================
+SUMMARY | VAL-FADE2 lb96_struct
+cfg={'lb': 96, 'min_range': 0.1, 'stop': 'struct'} shock=1.5 hold=6 | 60d | risk 1% | DUMP live untouched
+funnel scan=526511 TAKE=263 NOSHOCK=415042 NOIMP=74109 NOPROF=23800 NOFADE=12349 WIDE=38 NOTP=63 TINY=847
+================================================================
+--- FULL ---
+N=263 WR=14.1% 1-bar=12(7%) avg_stop=3.84% avg_TP1=1.63R avg_TP2=3.51R
+Final $142.12 (-52.6%) AvgR -0.28 MaxDD 58.7%
+STOP=178 TP1+TP2=26 TP2=8 TP1=3 BE=47 OPEN=1
+--- IS (first 2/3) ---
+N=115 WR=13.9% 1-bar=4(5%) avg_stop=4.30% avg_TP1=1.70R avg_TP2=3.39R
+Final $226.27 (-24.6%) AvgR -0.24 MaxDD 29.5%
+STOP=77 TP1+TP2=13 TP2=3 TP1=0 BE=22 OPEN=0
+--- OOS (last 1/3) ---
+N=148 WR=14.2% 1-bar=8(8%) avg_stop=3.48% avg_TP1=1.58R avg_TP2=3.60R
+Final $188.43 (-37.2%) AvgR -0.31 MaxDD 44.2%
+STOP=101 TP1+TP2=13 TP2=5 TP1=3 BE=25 OPEN=1
+
+================================================================
+SUMMARY | VAL-FADE2 lb192_tight
+cfg={'lb': 192, 'min_range': 0.15, 'stop': 'tight'} shock=1.5 hold=6 | 60d | risk 1% | DUMP live untouched
+funnel scan=505832 TAKE=338 NOSHOCK=404202 NOIMP=79137 NOPROF=14017 NOFADE=7866 WIDE=14 NOTP=132 TINY=126
+================================================================
+--- FULL ---
+N=338 WR=8.0% 1-bar=65(26%) avg_stop=1.55% avg_TP1=5.28R avg_TP2=12.68R
+Final $275.94 (-8.0%) AvgR +0.01 MaxDD 44.6%
+STOP=250 TP1+TP2=22 TP2=3 TP1=2 BE=59 OPEN=2
+--- IS (first 2/3) ---
+N=137 WR=9.5% 1-bar=23(25%) avg_stop=1.74% avg_TP1=4.29R avg_TP2=11.50R
+Final $379.60 (+26.5%) AvgR +0.20 MaxDD 18.6%
+STOP=93 TP1+TP2=12 TP2=1 TP1=0 BE=31 OPEN=0
+--- OOS (last 1/3) ---
+N=201 WR=7.0% 1-bar=42(27%) avg_stop=1.42% avg_TP1=5.96R avg_TP2=13.49R
+Final $218.08 (-27.3%) AvgR -0.12 MaxDD 44.3%
+STOP=157 TP1+TP2=10 TP2=2 TP1=2 BE=28 OPEN=2
+
+================================================================
+SUMMARY | VAL-FADE2 lb192_struct
+cfg={'lb': 192, 'min_range': 0.15, 'stop': 'struct'} shock=1.5 hold=6 | 60d | risk 1% | DUMP live untouched
+funnel scan=514674 TAKE=236 NOSHOCK=407852 NOIMP=79607 NOPROF=15717 NOFADE=10253 WIDE=94 NOTP=151 TINY=764
+================================================================
+--- FULL ---
+N=236 WR=16.5% 1-bar=5(3%) avg_stop=4.97% avg_TP1=2.02R avg_TP2=4.31R
+Final $197.70 (-34.1%) AvgR -0.17 MaxDD 47.5%
+STOP=154 TP1+TP2=27 TP2=9 TP1=3 BE=37 OPEN=6
+--- IS (first 2/3) ---
+N=83 WR=16.9% 1-bar=3(6%) avg_stop=5.06% avg_TP1=1.98R avg_TP2=4.15R
+Final $290.07 (-3.3%) AvgR -0.03 MaxDD 15.4%
+STOP=52 TP1+TP2=12 TP2=2 TP1=0 BE=17 OPEN=0
+--- OOS (last 1/3) ---
+N=153 WR=16.3% 1-bar=2(2%) avg_stop=4.92% avg_TP1=2.03R avg_TP2=4.39R
+Final $204.47 (-31.8%) AvgR -0.24 MaxDD 43.6%
+STOP=102 TP1+TP2=15 TP2=7 TP1=3 BE=20 OPEN=6
+
