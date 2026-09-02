@@ -1,12 +1,12 @@
 {
-  "updated": "2026-08-31T06:25:34.425182+00:00",
+  "updated": "2026-09-01T06:32:19.230438+00:00",
   "mode": "DUMP-only",
   "primary_version": "dump-v0.2b",
   "start": 300.0,
-  "final_primary": 278.24,
-  "total_r_primary": -3.3,
-  "n_primary": 27,
-  "max_dd_pct": 13.89,
+  "final_primary": 281.4,
+  "total_r_primary": -2.7,
+  "n_primary": 29,
+  "max_dd_pct": 15.62,
   "trades_primary": [
     {
       "time": "2026-08-14 09:15",
@@ -412,6 +412,36 @@
       "stop": 0.45144900000000004,
       "tp1": 0.4172616,
       "tp2": 0.39885299999999996
+    },
+    {
+      "time": "2026-08-31 10:30",
+      "symbol": "CYS",
+      "body": 8.5,
+      "result": "STOP",
+      "bars": 2,
+      "r": -1.0,
+      "extra": "",
+      "version": "dump-v0.2b",
+      "primary": true,
+      "entry": 0.8702,
+      "stop": 0.896306,
+      "tp1": 0.8284303999999999,
+      "tp2": 0.7918819999999998
+    },
+    {
+      "time": "2026-09-01 00:00",
+      "symbol": "ESPORTS",
+      "body": 6.6,
+      "result": "TP1",
+      "bars": 26,
+      "r": 1.6,
+      "extra": "last=0.01613",
+      "version": "dump-v0.2b",
+      "primary": true,
+      "entry": 0.01688,
+      "stop": 0.0173864,
+      "tp1": 0.01606976,
+      "tp2": 0.015360799999999997
     }
   ],
   "trades_legacy": []
