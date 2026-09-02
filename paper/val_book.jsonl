@@ -1,0 +1,4 @@
+{"id":"VF-20260901-ARB","symbol":"ARBUSDT","side":"short","book":"A","entry_ts":"2026-09-01T08:07:00Z","exit_ts":"2026-09-01T10:00:00Z","entry":0.1115,"stop":0.11301,"tp":0.10572,"tag":"STOP","r":-1.0,"note":"first stop"}
+{"id":"VF-20260901-0G","symbol":"0GUSDT","side":"short","book":"A","entry_ts":"2026-09-01T08:30:00Z","exit_ts":"2026-09-01T11:23:00Z","entry":0.2416,"stop":0.2488,"tp":0.2118,"tag":"TP2","r":4.1,"note":"0.4 and 0.5"}
+{"id":"VF-20260901-USELESS","symbol":"USELESSUSDT","side":"short","book":"A","entry_ts":"2026-09-01T07:49:00Z","exit_ts":"2026-09-01T13:07:00Z","entry":0.093,"stop":0.09523,"tp":0.08574,"tag":"STOP","r":-1.0,"note":"no scale"}
+{"id":"VF-20260901-CRV","symbol":"CRVUSDT","side":"short","book":"A","entry_ts":"2026-09-01T10:16:00Z","exit_ts":"2026-09-01T13:07:00Z","entry":null,"stop":0.3561,"tp":0.3393,"tag":"SKIP","r":0.0,"note":"pump 21"}
