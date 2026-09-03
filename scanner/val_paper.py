@@ -12,7 +12,7 @@ RISK_PCT = 0.01
 BOOK = PAPER / "val_book.jsonl"
 LATEST = PAPER / "val_latest.txt"
 
-def load_jsonl(path: Path):
+def load_jsonl(path):
     rows = []
     if not path.exists():
         return rows
@@ -30,28 +30,27 @@ def main():
     peak = START
     dd = 0.0
     taken = []
-    parts = []
+    rows = []
     for rec in book:
         tag = rec.get("tag") or "-"
         r = float(rec.get("r") or 0)
         sym = (rec.get("symbol") or rec.get("id") or "?").replace("USDT", "")
         if tag in ("SKIP", "IDEA", "OPEN"):
-            parts.append(f"{sym} {tag.lower()}")
+            rows.append(f"{sym:<10}  {tag.lower()}")
             continue
         cap += cap * RISK_PCT * r
         peak = max(peak, cap)
         dd = max(dd, (peak - cap) / peak if peak else 0.0)
         taken.append(r)
-        parts.append(f"{sym} {r:+.1f}R")
+        rows.append(f"{sym:<10}  {r:+5.1f}R  {tag}")
     n = len(taken)
     wr = 100.0 * sum(1 for x in taken if x > 0) / n if n else 0.0
     avgr = sum(taken) / n if n else 0.0
-    lines = [
-        f"VAL  {datetime.now(timezone.utc).strftime('%m-%d %H:%M')} UTC  ${cap:.2f}  ({(cap/START-1)*100:+.1f}%)",
-        f"N={n}  WR {wr:.0f}%  AvgR {avgr:+.2f}  DD {dd*100:.1f}%  risk 1%",
-        "  ".join(parts) if parts else "empty",
-    ]
-    text = "\n".join(lines) + "\n"
+    head = (
+        f"VAL  ${cap:.0f} ({(cap/START-1)*100:+.1f}%)  "
+        f"N={n}  WR {wr:.0f}%  AvgR {avgr:+.2f}  DD {dd*100:.0f}%"
+    )
+    text = head + "\n" + ("\n".join(rows) if rows else "empty") + "\n"
     LATEST.write_text(text, encoding="utf-8")
     print(text, end="")
 
