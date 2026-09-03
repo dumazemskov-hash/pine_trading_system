@@ -1,0 +1,2 @@
+{"logged_at": "2026-09-03T02:15:03.258205+00:00", "version": "val-fade-scan-0.1", "symbol": "T/USDT:USDT", "entry": 0.00566305, "stop": 0.00591035, "tp04": 0.0050448, "grid15": 0.0052921, "risk_pct": 4.367, "plan_r": 2.5, "pump_pct": 69.4, "bar_ts": 1788400800000, "btc_ret": 0.013}
+{"logged_at": "2026-09-03T02:45:17.810205+00:00", "version": "val-fade-scan-0.1", "symbol": "UAI/USDT:USDT", "entry": 0.5482, "stop": 0.55976, "tp04": 0.51352, "grid15": 0.53086, "risk_pct": 2.109, "plan_r": 3.0, "pump_pct": 61.7, "bar_ts": 1788402600000, "btc_ret": 0.234}

@@ -1,0 +1,14 @@
+================================================================
+VAL-FADE PAPER  kniga A
+2026-09-03 06:07 UTC
+desk=VAL-FADE  start=$300  risk=1%  NOT DUMP
+================================================================
+N taken 3  open/skip 1  WR 33.3%  AvgR +0.70
+Start $300.00 -> Final $306.09 (+2.0%)
+MaxDD 1.0%
+
+id                     sym          tag           R       eq
+VF-20260901-ARB        ARBUSDT      STOP      -1.00   297.00
+VF-20260901-0G         0GUSDT       TP2       +4.10   309.18
+VF-20260901-USELESS    USELESSUSDT  STOP      -1.00   306.09
+VF-20260901-CRV        CRVUSDT      SKIP      +0.00   306.09
