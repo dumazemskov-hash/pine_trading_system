@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VAL paper: signals_val (TG alerts). $300 / 1%. Not DUMP, not hand journal."""
+"""VAL paper: signals_val on Bybit. $300 / 1%. Fee VIP0 taker 0.055% x2."""
 from __future__ import annotations
 import json, time
 from datetime import datetime, timezone
@@ -17,6 +17,7 @@ LATEST = PAPER / "val_latest.txt"
 START = 300.0
 RISK_PCT = 0.01
 GRID_R = 1.5
+TAKER = 0.00055  # Bybit USDT perp VIP0
 
 def load_signals():
     by_key = {}
@@ -39,6 +40,12 @@ def load_signals():
     out.sort(key=lambda r: int(r.get("bar_ts") or 0))
     return out
 
+def fee_r(entry, stop):
+    risk_pct = (stop - entry) / entry if entry else 0
+    if risk_pct <= 0:
+        return 0.0
+    return (2.0 * TAKER) / risk_pct
+
 def resolve(ex, sig):
     symbol = sig["symbol"]
     entry = float(sig["entry"])
@@ -48,25 +55,30 @@ def resolve(ex, sig):
     bar_ts = int(sig.get("bar_ts") or 0)
     risk = stop - entry
     if risk <= 0:
-        return "ERR", 0.0
+        return "ERR", 0.0, 0.0
     plan_r = (entry - tp2) / risk if tp2 and tp2 < entry else GRID_R
+    fr = fee_r(entry, stop)
     try:
         raw = ex.fetch_ohlcv(symbol, "15m", since=bar_ts - 15 * 60 * 1000 if bar_ts else None, limit=300)
-    except Exception as e:
-        return "ERR", 0.0
+    except Exception:
+        return "ERR", 0.0, 0.0
     bars = [c for c in raw if c[0] > bar_ts] if bar_ts else raw
     if not bars:
-        return "OPEN", 0.0
+        return "OPEN", 0.0, 0.0
     tp1_hit = False
     for c in bars:
         hi, lo = c[2], c[3]
         if hi >= (entry if tp1_hit else stop):
-            return ("BE", 0.5 * GRID_R) if tp1_hit else ("STOP", -1.0)
+            tag, r = ("BE", 0.5 * GRID_R) if tp1_hit else ("STOP", -1.0)
+            return tag, r - fr, fr
         if lo <= tp2:
-            return ("TP2", 0.5 * GRID_R + 0.5 * plan_r) if tp1_hit else ("TP2", plan_r)
+            tag, r = (("TP2", 0.5 * GRID_R + 0.5 * plan_r) if tp1_hit else ("TP2", plan_r))
+            return tag, r - fr, fr
         if lo <= tp1:
             tp1_hit = True
-    return ("TP1", 0.5 * GRID_R) if tp1_hit else ("OPEN", 0.0)
+    if tp1_hit:
+        return "TP1", 0.5 * GRID_R - fr, fr
+    return "OPEN", 0.0, 0.0
 
 def main():
     PAPER.mkdir(parents=True, exist_ok=True)
@@ -86,7 +98,7 @@ def main():
     taken = []
     lines = []
     for sig in sigs:
-        tag, r = resolve(ex, sig)
+        tag, r, fr = resolve(ex, sig)
         name = str(sig["symbol"]).split("/")[0].replace("USDT", "").replace(":", "")
         ts = int(sig.get("bar_ts") or 0)
         tstr = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime("%m-%d %H:%M") if ts else "?"
@@ -96,14 +108,16 @@ def main():
             peak = max(peak, cap)
             dd = max(dd, (peak - cap) / peak if peak else 0.0)
             taken.append(r)
-        lines.append(f"{tstr}  {name:<8}  {tag:<4}  {r:+5.1f}R  pump {pump:.0f}%")
+        extra = f"  fee {fr:.2f}R" if fr else ""
+        lines.append(f"{tstr}  {name:<8}  {tag:<4}  {r:+5.2f}R{extra}  pump {pump:.0f}%")
         time.sleep(0.12)
     n = len(taken)
     wr = 100.0 * sum(1 for x in taken if x > 0) / n if n else 0.0
     avgr = sum(taken) / n if n else 0.0
     head = (
-        f"VAL scan  ${cap:.0f} ({(cap/START-1)*100:+.1f}%)  "
-        f"N={n}  WR {wr:.0f}%  AvgR {avgr:+.2f}  DD {dd*100:.0f}%  1%"
+        f"VAL Bybit  ${cap:.0f} ({(cap/START-1)*100:+.1f}%)  "
+        f"N={n}  WR {wr:.0f}%  AvgR {avgr:+.2f}  DD {dd*100:.0f}%  "
+        f"taker 0.055%x2"
     )
     text = head + "\n" + "\n".join(lines) + "\n"
     LATEST.write_text(text, encoding="utf-8")
