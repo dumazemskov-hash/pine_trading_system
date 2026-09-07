@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Count ARMED -> wick / FIRED / miss on ~14d top50. No live orders."""
+"""Count ARMED -> wick / FIRED / miss. ~10d top50. No live orders."""
 from __future__ import annotations
 import time
 import sys
@@ -12,6 +12,7 @@ from val_scanner import (  # noqa: E402
 )
 
 LOOK_BARS = 16
+FETCH = 1000
 
 def classify(bars, armed_i, entry, stop):
     wick = False
@@ -38,29 +39,31 @@ def main():
         raise SystemExit("need ccxt")
     symbols = top_symbols(ex)
     start = PUMP_LB + HOLD + 20
-    print(f"FAKE-LAB  top{len(symbols)}  walk from bar {start}  look {LOOK_BARS}")
+    print(f"FAKE-LAB  top{len(symbols)}  fetch {FETCH}  walk from {start}")
+    print("будет минуты три, не 10006 паника")
     tally = {}
     n_armed = 0
     seen = set()
-    for symbol in symbols:
+    for n, symbol in enumerate(symbols, 1):
+        short = symbol.split("/")[0]
         try:
-            raw = ex.fetch_ohlcv(symbol, "15m", limit=250)
+            raw = ex.fetch_ohlcv(symbol, "15m", limit=FETCH)
             time.sleep(REQ_SLEEP)
         except Exception as e:
-            print(f"{symbol.split('/')[0]}: {str(e)[:60]}")
+            print(f"{short}: {str(e)[:60]}")
             if is_rate_limit(e):
                 time.sleep(12)
             continue
         bars = raw[:-1] if len(raw) >= 2 else raw
         if len(bars) < start + 10:
+            print(f"{short} skip short {len(bars)}")
             continue
-        short = symbol.split("/")[0]
         found = 0
         for last in range(start, len(bars)):
             node = find_node(bars[: last + 1])
             if node is None or node["kind"] != "armed":
                 continue
-            pid = (symbol, node.get("pump_ts") or node["entry"])
+            pid = (symbol, node.get("pump_ts") or round(node["entry"], 8))
             if pid in seen:
                 continue
             seen.add(pid)
@@ -68,15 +71,14 @@ def main():
             found += 1
             tag = classify(bars, last, node["entry"], node["stop"])
             tally[tag] = tally.get(tag, 0) + 1
-            print(f"  {short:<10} {tag}")
-        print(f"{short} armed_now {found}")
+        print(f"[{n}/{len(symbols)}] {short:<10} armed {found}  total {n_armed}")
     print("----")
     print(f"ARMED {n_armed}")
     for k in sorted(tally):
         pct = 100.0 * tally[k] / n_armed if n_armed else 0
         print(f"{k:<12} {tally[k]:3d}  {pct:.0f}%")
     fake = tally.get("WICK_FAKE", 0) + tally.get("WICK_STOP", 0)
-    print(f"FILL_THEN_FAIL {fake}  ({100.0*fake/n_armed if n_armed else 0:.0f}%)")
+    print(f"FILL_THEN_FAIL {fake}  ({100.0 * fake / n_armed if n_armed else 0:.0f}%)")
 
 if __name__ == "__main__":
     main()
