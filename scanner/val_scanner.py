@@ -17,8 +17,9 @@ LATEST_PATH = ROOT / "paper" / "val_latest.txt"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8821282524:AAG7OKFKdzks0qy2WdqBi4gU2dV62Isp90k")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "401292001")
 TIMEFRAME = "15m"
-LOOP_SLEEP = 45
-MAX_SYMBOLS = int(os.environ.get("VAL_MAX_SYMBOLS", "80"))
+LOOP_SLEEP = int(os.environ.get("VAL_LOOP_SLEEP", "90"))
+REQ_SLEEP = float(os.environ.get("VAL_REQ_SLEEP", "0.18"))
+MAX_SYMBOLS = int(os.environ.get("VAL_MAX_SYMBOLS", "50"))
 COOLDOWN_BARS = 48
 LIMIT = 250
 PUMP_MIN = 0.30
@@ -159,7 +160,10 @@ def find_setup(bars):
 def make_exchange():
     if ccxt is None:
         return None
-    return ccxt.bybit({"enableRateLimit": True, "options": {"defaultType": "swap", "fetchMarkets": ["linear"]}})
+    return ccxt.bybit({
+        "enableRateLimit": True,
+        "options": {"defaultType": "swap", "fetchMarkets": ["linear"]},
+    })
 
 def top_symbols(ex):
     if ex is None:
@@ -170,6 +174,10 @@ def top_symbols(ex):
             rows.append((t.get("quoteVolume") or 0, s))
     rows.sort(reverse=True)
     return [s for _, s in rows[:MAX_SYMBOLS]]
+
+def is_rate_limit(err) -> bool:
+    s = str(err)
+    return "10006" in s or "Too many visits" in s or "RateLimit" in s
 
 def fetch_ohlcv(ex, symbol):
     raw = ex.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=LIMIT)
@@ -182,13 +190,15 @@ def btc_bar_ret(ex):
             return None
         o, c = raw[-1][1], raw[-1][4]
         return (c - o) / o if o > 0 else None
-    except Exception:
+    except Exception as e:
+        if is_rate_limit(e):
+            raise
         return None
 
 def main():
     SIGNALS_DIR.mkdir(parents=True, exist_ok=True)
     print(f"[{now().strftime('%H:%M:%S')}] VAL-FADE scanner  15m  top{MAX_SYMBOLS}  close_fill={CLOSE_FILL}")
-    print("signals ->", SIGNALS_DIR)
+    print(f"sleep {REQ_SLEEP}s/req  loop {LOOP_SLEEP}s  signals -> {SIGNALS_DIR}")
     print("NE DUMP")
     ex = make_exchange()
     if ex is None:
@@ -198,14 +208,24 @@ def main():
     state = load_state()
     sent = set(state.get("sent") or [])
     last_bar = state.get("last") or {}
+    cycles = 0
     while True:
-        btc = btc_bar_ret(ex)
+        try:
+            btc = btc_bar_ret(ex)
+        except Exception as e:
+            if is_rate_limit(e):
+                print(f"[{now().strftime('%H:%M:%S')}] rate limit BTC, sleep 20s")
+                time.sleep(20)
+                continue
+            btc = None
         if btc is not None and btc <= -BTC_DUMP:
             print(f"[{now().strftime('%H:%M:%S')}] BTC {btc*100:.2f}% skip cycle")
             time.sleep(LOOP_SLEEP); continue
+        rate_hits = 0
         for symbol in symbols:
             try:
                 bars = fetch_ohlcv(ex, symbol)
+                time.sleep(REQ_SLEEP)
                 sig = find_setup(bars)
                 if sig is None:
                     continue
@@ -236,7 +256,24 @@ def main():
                 )
                 print(f"[{now().strftime('%H:%M:%S')}] VAL -> {symbol}  pump={rec['pump_pct']:.1f}%")
             except Exception as e:
-                print(f"{symbol}: {e}")
+                if is_rate_limit(e):
+                    rate_hits += 1
+                    wait = min(30, 8 * rate_hits)
+                    print(f"[{now().strftime('%H:%M:%S')}] 10006 {symbol.split('/')[0]} sleep {wait}s")
+                    time.sleep(wait)
+                    if rate_hits >= 4:
+                        print(f"[{now().strftime('%H:%M:%S')}] rate limit, skip rest of cycle")
+                        break
+                else:
+                    print(f"{symbol.split('/')[0]}: {str(e)[:80]}")
+                time.sleep(REQ_SLEEP)
+        cycles += 1
+        if cycles % 20 == 0:
+            try:
+                symbols = top_symbols(ex)
+                print(f"[{now().strftime('%H:%M:%S')}] refresh symbols {len(symbols)}")
+            except Exception as e:
+                print(f"tickers: {e}")
         time.sleep(LOOP_SLEEP)
 
 if __name__ == "__main__":
