@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VAL-FADE live scanner. Not DUMP. Writes signals_val/. Telegram prefix VAL-FADE."""
+"""VAL-FADE scanner. ARMED = limit on node. FIRED = close below node (journal)."""
 from __future__ import annotations
 import json, os, time
 from datetime import datetime, timezone
@@ -13,7 +13,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 SIGNALS_DIR = ROOT / "signals_val"
 STATE_PATH = SIGNALS_DIR / "sent.json"
-LATEST_PATH = ROOT / "paper" / "val_latest.txt"
+ARMED_PATH = SIGNALS_DIR / "armed.jsonl"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8821282524:AAG7OKFKdzks0qy2WdqBi4gU2dV62Isp90k")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "401292001")
 TIMEFRAME = "15m"
@@ -31,7 +31,6 @@ HOLD = 6
 MIN_STOP_PCT = 0.004
 MAX_STOP_PCT = 0.08
 MIN_RR = 1.2
-CLOSE_FILL = True
 BTC_DUMP = 0.006
 GRID_R = 1.5
 
@@ -49,25 +48,20 @@ def send_telegram(message: str):
 
 def load_state():
     if not STATE_PATH.exists():
-        return {"sent": [], "last": {}}
+        return {"sent": [], "armed": [], "last": {}}
     try:
         return json.loads(STATE_PATH.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        return {"sent": [], "last": {}}
+        return {"sent": [], "armed": [], "last": {}}
 
 def save_state(state):
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(state), encoding="utf-8")
 
-def log_signal(rec):
-    SIGNALS_DIR.mkdir(parents=True, exist_ok=True)
-    path = SIGNALS_DIR / f"{now().strftime('%Y-%m-%d')}.jsonl"
+def append_jsonl(path: Path, rec: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    LATEST_PATH.parent.mkdir(parents=True, exist_ok=True)
-    LATEST_PATH.write_text(
-        f"{rec['logged_at']}  {rec['symbol']}  entry={rec['entry']}  stop={rec['stop']}  tp04={rec['tp04']}\n",
-        encoding="utf-8")
 
 def local_high(bars, i, left=3, right=3):
     h = bars[i][2]
@@ -119,11 +113,30 @@ def profile_cluster(bars, lo_i, hi_i):
     return {"lo": lo, "hi": hi, "node_lo": node_lo, "node_hi": node_hi,
             "tp": hi - 0.4 * (hi - lo), "pump_pct": (hi - lo) / lo * 100.0}
 
-def find_setup(bars):
+def pack(node, i, bar, kind):
+    entry, stop, tp = node["node_lo"], node["node_hi"], node["tp"]
+    risk = stop - entry
+    return {
+        "kind": kind,
+        "pump_bar": i,
+        "pump_ts": bar and None,
+        "entry": entry,
+        "stop": stop,
+        "tp04": tp,
+        "grid": entry - GRID_R * risk,
+        "stop_pct": (risk / entry) * 100.0,
+        "plan_r": (entry - tp) / risk,
+        "pump_pct": node["pump_pct"],
+        "bar_ts": bar[0],
+    }
+
+def find_node(bars):
+    """Latest ready node. kind=armed | fired | dead."""
     n = len(bars)
     if n < PUMP_LB + 20:
         return None
     last = n - 1
+    bar = bars[last]
     i = last - HOLD
     while i > n - PUMP_LB and i > 8:
         if not local_high(bars, i):
@@ -145,17 +158,33 @@ def find_setup(bars):
         start = i + HOLD
         if last < start:
             i -= 1; continue
-        bar = bars[last]
-        hit = bar[4] < entry if CLOSE_FILL else bar[3] <= entry
-        if not hit:
-            return None
-        already = any(bars[j][4] < entry if CLOSE_FILL else bars[j][3] <= entry for j in range(start, last))
-        if already:
-            return None
-        return {"pump_bar": i, "entry": entry, "stop": stop, "tp04": tp,
-                "grid": entry - GRID_R * (stop - entry), "stop_pct": stop_pct * 100.0,
-                "plan_r": rr, "pump_pct": node["pump_pct"], "bar_ts": bar[0]}
+        if bar[2] >= stop:
+            return pack(node, i, bar, "dead")
+        if bar[4] < entry:
+            already = any(bars[j][4] < entry for j in range(start, last))
+            if already:
+                return pack(node, i, bar, "dead")
+            return pack(node, i, bar, "fired")
+        return pack(node, i, bar, "armed")
     return None
+
+def rec_base(symbol, node, btc):
+    return {
+        "logged_at": now().isoformat(),
+        "version": "val-fade-scan-0.2",
+        "symbol": symbol,
+        "kind": node["kind"],
+        "entry": round(node["entry"], 8),
+        "stop": round(node["stop"], 8),
+        "tp04": round(node["tp04"], 8),
+        "grid15": round(node["grid"], 8),
+        "risk_pct": round(node["stop_pct"], 3),
+        "plan_r": round(node["plan_r"], 2),
+        "pump_pct": round(node["pump_pct"], 1),
+        "bar_ts": node["bar_ts"],
+        "pump_bar": node["pump_bar"],
+        "btc_ret": None if btc is None else round(btc * 100, 3),
+    }
 
 def make_exchange():
     if ccxt is None:
@@ -197,9 +226,8 @@ def btc_bar_ret(ex):
 
 def main():
     SIGNALS_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"[{now().strftime('%H:%M:%S')}] VAL-FADE scanner  15m  top{MAX_SYMBOLS}  close_fill={CLOSE_FILL}")
-    print(f"sleep {REQ_SLEEP}s/req  loop {LOOP_SLEEP}s  signals -> {SIGNALS_DIR}")
-    print("NE DUMP")
+    print(f"[{now().strftime('%H:%M:%S')}] VAL-FADE  top{MAX_SYMBOLS}  ARMED+FIRED")
+    print(f"sleep {REQ_SLEEP}s/req  loop {LOOP_SLEEP}s")
     ex = make_exchange()
     if ex is None:
         raise SystemExit("need ccxt")
@@ -207,6 +235,7 @@ def main():
     print(f"symbols {len(symbols)}")
     state = load_state()
     sent = set(state.get("sent") or [])
+    armed_sent = set(state.get("armed") or [])
     last_bar = state.get("last") or {}
     cycles = 0
     while True:
@@ -226,35 +255,47 @@ def main():
             try:
                 bars = fetch_ohlcv(ex, symbol)
                 time.sleep(REQ_SLEEP)
-                sig = find_setup(bars)
-                if sig is None:
+                node = find_node(bars)
+                if node is None or node["kind"] == "dead":
                     continue
-                sid = f"{symbol}_{sig['bar_ts']}"
+                short = symbol.split("/")[0]
+                if node["kind"] == "armed":
+                    aid = f"{symbol}_{node['pump_bar']}_armed"
+                    if aid in armed_sent:
+                        continue
+                    armed_sent.add(aid)
+                    rec = rec_base(symbol, node, btc)
+                    append_jsonl(ARMED_PATH, rec)
+                    save_state({"sent": list(sent)[-400:], "armed": list(armed_sent)[-400:], "last": last_bar})
+                    send_telegram(
+                        f"VAL-FADE ARMED | {symbol}\n"
+                        f"лимит {rec['entry']}\nстоп  {rec['stop']}\n"
+                        f"TP1 {rec['grid15']}\nTP2 {rec['tp04']}\n"
+                        f"pump {rec['pump_pct']:.1f}%  risk {rec['risk_pct']:.2f}%  planR {rec['plan_r']:.2f}\n"
+                        f"не рынок — лимитка на узел"
+                    )
+                    print(f"[{now().strftime('%H:%M:%S')}] ARMED {short}  limit={rec['entry']}  pump={rec['pump_pct']:.1f}%")
+                    continue
+                sid = f"{symbol}_{node['bar_ts']}"
                 if sid in sent:
                     continue
                 prev = last_bar.get(symbol)
-                if prev and (sig["bar_ts"] - prev) / (15 * 60 * 1000) < COOLDOWN_BARS:
+                if prev and (node["bar_ts"] - prev) / (15 * 60 * 1000) < COOLDOWN_BARS:
                     continue
-                sent.add(sid); last_bar[symbol] = sig["bar_ts"]
-                rec = {
-                    "logged_at": now().isoformat(), "version": "val-fade-scan-0.1",
-                    "symbol": symbol, "entry": round(sig["entry"], 8),
-                    "stop": round(sig["stop"], 8), "tp04": round(sig["tp04"], 8),
-                    "grid15": round(sig["grid"], 8), "risk_pct": round(sig["stop_pct"], 3),
-                    "plan_r": round(sig["plan_r"], 2), "pump_pct": round(sig["pump_pct"], 1),
-                    "bar_ts": sig["bar_ts"],
-                    "btc_ret": None if btc is None else round(btc * 100, 3),
-                }
-                log_signal(rec)
-                save_state({"sent": list(sent)[-400:], "last": last_bar})
+                sent.add(sid)
+                last_bar[symbol] = node["bar_ts"]
+                rec = rec_base(symbol, node, btc)
+                day = SIGNALS_DIR / f"{now().strftime('%Y-%m-%d')}.jsonl"
+                append_jsonl(day, rec)
+                save_state({"sent": list(sent)[-400:], "armed": list(armed_sent)[-400:], "last": last_bar})
                 send_telegram(
-                    f"VAL-FADE | {symbol}\npump {rec['pump_pct']:.1f}%\n"
-                    f"Entry: {rec['entry']}\nStop:  {rec['stop']}\n"
-                    f"TP1 1.5R: {rec['grid15']}\nTP2 0.4:  {rec['tp04']}\n"
-                    f"Risk:  {rec['risk_pct']:.2f}%   planR {rec['plan_r']:.2f}\n"
-                    f"BTC bar: {rec['btc_ret']}\nsetka 50% @ 1.5R -> BE\nNE DUMP"
+                    f"VAL-FADE FIRED | {symbol}\n"
+                    f"close под узлом  {rec['entry']}\n"
+                    f"стоп {rec['stop']}  TP2 {rec['tp04']}\n"
+                    f"pump {rec['pump_pct']:.1f}%\n"
+                    f"если лимитки не было — не догонять"
                 )
-                print(f"[{now().strftime('%H:%M:%S')}] VAL -> {symbol}  pump={rec['pump_pct']:.1f}%")
+                print(f"[{now().strftime('%H:%M:%S')}] FIRED {short}  pump={rec['pump_pct']:.1f}%")
             except Exception as e:
                 if is_rate_limit(e):
                     rate_hits += 1
