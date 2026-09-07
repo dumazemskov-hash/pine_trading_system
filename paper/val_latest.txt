@@ -1,1 +1,35 @@
-2026-09-06T18:15:58.429999+00:00  MAGMA/USDT:USDT  entry=0.27158  stop=0.2754  tp04=0.26394
+VAL Bybit  $519 (+72.9%)  N=34  WR 82%  AvgR +1.64  DD 1%  taker 0.055%x2
+09-02 10:30  BTR       TP2   +1.93R  fee 0.07R  pump 38%
+09-02 10:45  CRV       BE    +0.66R  fee 0.09R  pump 31%
+09-02 11:15  ACE       TP2   +1.47R  fee 0.03R  pump 43%
+09-02 14:00  T         TP2   +3.20R  fee 0.05R  pump 69%
+09-02 14:15  UAI       TP2   +2.95R  fee 0.05R  pump 67%
+09-02 14:15  MAGMA     BE    +0.70R  fee 0.05R  pump 74%
+09-03 02:00  T         TP2   +1.97R  fee 0.03R  pump 69%
+09-03 02:30  UAI       TP2   +2.95R  fee 0.05R  pump 62%
+09-04 06:00  CASHCAT   TP2   +1.92R  fee 0.08R  pump 36%
+09-04 06:15  BTW       TP2   +1.92R  fee 0.08R  pump 32%
+09-04 07:00  HEMI      TP2   +3.95R  fee 0.05R  pump 60%
+09-04 07:45  MARSCOIN  STOP  -1.03R  fee 0.03R  pump 170%
+09-04 08:00  T         TP2   +4.93R  fee 0.07R  pump 45%
+09-04 11:45  NIULAI    TP2   +1.95R  fee 0.05R  pump 57%
+09-04 12:45  USELESS   STOP  -1.03R  fee 0.03R  pump 195%
+09-04 13:45  SPX       TP2   +1.95R  fee 0.05R  pump 30%
+09-04 15:00  EDGE      STOP  -1.04R  fee 0.04R  pump 88%
+09-04 19:30  MAGMA     BE    +0.71R  fee 0.04R  pump 36%
+09-04 20:30  PONS      STOP  -1.02R  fee 0.02R  pump 118%
+09-05 03:45  HNT       TP2   +4.94R  fee 0.06R  pump 58%
+09-05 08:00  MAGMA     TP2   +1.96R  fee 0.04R  pump 36%
+09-05 08:45  CHIP      BE    +0.67R  fee 0.08R  pump 33%
+09-05 18:00  HNT       TP2   +4.94R  fee 0.06R  pump 49%
+09-05 22:15  CASHCAT   TP2   +2.91R  fee 0.09R  pump 32%
+09-05 22:30  MAGMA     TP2   +1.46R  fee 0.04R  pump 40%
+09-05 23:00  PONS      BE    +0.70R  fee 0.05R  pump 61%
+09-05 23:30  DASH      STOP  -1.02R  fee 0.02R  pump 75%
+09-06 02:15  APR       TP2   +1.92R  fee 0.08R  pump 33%
+09-06 02:45  USELESS   BE    +0.70R  fee 0.05R  pump 74%
+09-06 03:15  ARB       STOP  -1.06R  fee 0.06R  pump 55%
+09-06 10:45  MARSCOIN  TP2   +2.97R  fee 0.03R  pump 149%
+09-06 11:00  CASHCAT   TP2   +2.91R  fee 0.09R  pump 32%
+09-06 15:15  ARB       BE    +0.70R  fee 0.05R  pump 61%
+09-06 18:00  MAGMA     TP2   +1.92R  fee 0.08R  pump 35%
