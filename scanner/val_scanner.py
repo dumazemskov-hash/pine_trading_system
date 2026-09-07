@@ -113,13 +113,13 @@ def profile_cluster(bars, lo_i, hi_i):
     return {"lo": lo, "hi": hi, "node_lo": node_lo, "node_hi": node_hi,
             "tp": hi - 0.4 * (hi - lo), "pump_pct": (hi - lo) / lo * 100.0}
 
-def pack(node, i, bar, kind):
+def pack(node, i, bar, kind, pump_ts):
     entry, stop, tp = node["node_lo"], node["node_hi"], node["tp"]
     risk = stop - entry
     return {
         "kind": kind,
         "pump_bar": i,
-        "pump_ts": bar and None,
+        "pump_ts": pump_ts,
         "entry": entry,
         "stop": stop,
         "tp04": tp,
@@ -131,7 +131,6 @@ def pack(node, i, bar, kind):
     }
 
 def find_node(bars):
-    """Latest ready node. kind=armed | fired | dead."""
     n = len(bars)
     if n < PUMP_LB + 20:
         return None
@@ -158,14 +157,15 @@ def find_node(bars):
         start = i + HOLD
         if last < start:
             i -= 1; continue
+        pump_ts = bars[i][0]
         if bar[2] >= stop:
-            return pack(node, i, bar, "dead")
+            return pack(node, i, bar, "dead", pump_ts)
         if bar[4] < entry:
             already = any(bars[j][4] < entry for j in range(start, last))
             if already:
-                return pack(node, i, bar, "dead")
-            return pack(node, i, bar, "fired")
-        return pack(node, i, bar, "armed")
+                return pack(node, i, bar, "dead", pump_ts)
+            return pack(node, i, bar, "fired", pump_ts)
+        return pack(node, i, bar, "armed", pump_ts)
     return None
 
 def rec_base(symbol, node, btc):
@@ -183,6 +183,7 @@ def rec_base(symbol, node, btc):
         "pump_pct": round(node["pump_pct"], 1),
         "bar_ts": node["bar_ts"],
         "pump_bar": node["pump_bar"],
+        "pump_ts": node.get("pump_ts"),
         "btc_ret": None if btc is None else round(btc * 100, 3),
     }
 
@@ -260,7 +261,7 @@ def main():
                     continue
                 short = symbol.split("/")[0]
                 if node["kind"] == "armed":
-                    aid = f"{symbol}_{node['pump_bar']}_armed"
+                    aid = f"{symbol}_{node.get('pump_ts') or node['pump_bar']}_armed"
                     if aid in armed_sent:
                         continue
                     armed_sent.add(aid)
