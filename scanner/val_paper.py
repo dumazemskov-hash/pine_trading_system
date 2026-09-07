@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VAL paper LIMIT: fill = node_lo. $300 / 1%. Bybit taker 0.055%x2."""
+"""VAL paper LIMIT: fill = node_lo. Only FIRED daily jsonl, not armed.jsonl."""
 from __future__ import annotations
 import json, time
 from datetime import datetime, timezone
@@ -18,12 +18,15 @@ START = 300.0
 RISK_PCT = 0.01
 GRID_R = 1.5
 TAKER = 0.00055
+SKIP_FILES = {"armed.jsonl"}
 
 def load_signals():
     by_key = {}
     if not SIGNALS.exists():
         return []
     for path in sorted(SIGNALS.glob("*.jsonl")):
+        if path.name in SKIP_FILES or path.name.startswith("limit"):
+            continue
         for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
@@ -31,6 +34,8 @@ def load_signals():
             try:
                 rec = json.loads(line)
             except json.JSONDecodeError:
+                continue
+            if rec.get("kind") == "armed":
                 continue
             if "entry" not in rec or "symbol" not in rec:
                 continue
