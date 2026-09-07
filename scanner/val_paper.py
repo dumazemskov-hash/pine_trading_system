@@ -109,7 +109,7 @@ def resolve_close(sig_bar, after, node, stop, tp2):
     tag, r, fr = walk(after, fill, stop, tp2, tp1, plan_r, fr)
     return tag, r, fr, slip
 
-def run_book(label, rows):
+def score(rows):
     cap = START
     peak = START
     dd = 0.0
@@ -126,10 +126,10 @@ def run_book(label, rows):
     wr = 100.0 * sum(1 for x in taken if x > 0) / n if n else 0.0
     avgr = sum(taken) / n if n else 0.0
     head = (
-        f"{label}  ${cap:.0f} ({(cap/START-1)*100:+.1f}%)  "
+        f"${cap:.0f} ({(cap/START-1)*100:+.1f}%)  "
         f"N={n}  WR {wr:.0f}%  AvgR {avgr:+.2f}  DD {dd*100:.0f}%"
     )
-    return head + "\n" + "\n".join(lines) + "\n"
+    return head, lines
 
 def main():
     PAPER.mkdir(parents=True, exist_ok=True)
@@ -154,7 +154,7 @@ def main():
         tstr = datetime.fromtimestamp(bar_ts / 1000, tz=timezone.utc).strftime("%m-%d %H:%M") if bar_ts else "?"
         pump = float(sig.get("pump_pct") or 0)
         try:
-            raw = ex.fetch_ohlcv(symbol := sig["symbol"], "15m",
+            raw = ex.fetch_ohlcv(sig["symbol"], "15m",
                                  since=bar_ts - 15 * 60 * 1000 if bar_ts else None, limit=300)
         except Exception:
             raw = []
@@ -166,13 +166,16 @@ def main():
         lim_rows.append((tstr, name, pump, tag_l, r_l, extra_l))
         cls_rows.append((tstr, name, pump, tag_c, r_c, extra_c))
         time.sleep(0.12)
+    h_lim, _ = score(lim_rows)
+    h_cls, _ = score(cls_rows)
     text = (
-        run_book("VAL LIMIT узел", lim_rows)
-        + "\n"
-        + run_book("VAL CLOSE бар", cls_rows)
+        "VAL LIMIT узел  " + h_lim + "\n"
+        "VAL CLOSE бар   " + h_cls + "\n"
     )
     LATEST.write_text(text, encoding="utf-8")
     print(text, end="")
+    print("LIMIT " + h_lim)
+    print("CLOSE " + h_cls)
 
 if __name__ == "__main__":
     main()
