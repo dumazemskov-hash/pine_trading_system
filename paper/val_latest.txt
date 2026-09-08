@@ -1,4 +1,4 @@
-VAL LIMIT  $528 (+76.1%)  N=37  WR 81%  AvgR +1.56  DD 1%
+VAL LIMIT  $534 (+78.0%)  N=36  WR 83%  AvgR +1.63  DD 1%
 09-02 10:30  BTR       TP2   +1.93R  fee 0.07R  pump 38%
 09-02 10:45  CRV       BE    +0.66R  fee 0.09R  pump 31%
 09-02 11:15  ACE       TP2   +1.47R  fee 0.03R  pump 43%
@@ -35,9 +35,4 @@ VAL LIMIT  $528 (+76.1%)  N=37  WR 81%  AvgR +1.56  DD 1%
 09-06 18:00  MAGMA     TP2   +1.92R  fee 0.08R  pump 35%
 09-07 07:30  JUP       TP2   +1.46R  fee 0.04R  pump 31%
 09-07 08:30  ARB       TP2   +1.47R  fee 0.03R  pump 58%
-09-07 09:00  PONS      STOP  -1.03R  fee 0.03R  pump 42%
-09-07 10:15  DOOD      OPEN  +0.00R  pump 69%
-09-07 10:30  DOOD      OPEN  +0.00R  pump 69%
-09-07 10:45  DOOD      OPEN  +0.00R  pump 69%
-09-07 11:00  DOOD      OPEN  +0.00R  pump 69%
-VAL LIMIT  $528 (+76.1%)  N=37  WR 81%  AvgR +1.56  DD 1%
+VAL LIMIT  $534 (+78.0%)  N=36  WR 83%  AvgR +1.63  DD 1%
