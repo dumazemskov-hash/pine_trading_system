@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VAL-FADE v2. Pump 30-75%. ARMED watch. FIRED after next bar holds under node. One node once."""
+"""VAL-FADE v2. Pump 30-100%. ARMED watch. FIRED after next bar holds under node. One node once."""
 from __future__ import annotations
 import json, os, time
 from datetime import datetime, timezone
@@ -23,7 +23,7 @@ MAX_SYMBOLS = int(os.environ.get("VAL_MAX_SYMBOLS", "50"))
 COOLDOWN_BARS = 48
 LIMIT = 250
 PUMP_MIN = 0.30
-PUMP_MAX = 0.75
+PUMP_MAX = 1.00
 PUMP_LB = 192
 N_BINS = 20
 HVN_FRAC = 0.55
@@ -248,7 +248,7 @@ def btc_bar_ret(ex):
 
 def main():
     SIGNALS_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"[{now().strftime('%H:%M:%S')}] VAL-FADE v2  top{MAX_SYMBOLS}  pump 30-75%  confirm+1")
+    print(f"[{now().strftime('%H:%M:%S')}] VAL-FADE v2  top{MAX_SYMBOLS}  pump 30-100%  confirm+1")
     print(f"sleep {REQ_SLEEP}s/req  loop {LOOP_SLEEP}s")
     ex = make_exchange()
     if ex is None:
@@ -312,7 +312,7 @@ def main():
                                 f"VAL-FADE v2 FIRED | {symbol}\n"
                                 f"слом удержан close {last[4]}\n"
                                 f"вход {rec['entry']}  стоп {rec['stop']}\n"
-                                f"TP1 {rec['grid15']}  (основной)\n"
+                                f"TP1 {rec['grid15']}\n"
                                 f"TP2 {rec['tp04']}\n"
                                 f"pump {rec['pump_pct']:.1f}%\n"
                                 f"не догонять рынок"
