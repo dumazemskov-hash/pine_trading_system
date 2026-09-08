@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VAL paper LIMIT: fill = node_lo. Only FIRED daily jsonl, not armed.jsonl."""
+"""VAL paper v2 only. Old LIMIT 80% book disabled."""
 from __future__ import annotations
 import json, time
 from datetime import datetime, timezone
@@ -18,6 +18,7 @@ START = 300.0
 RISK_PCT = 0.01
 GRID_R = 1.5
 TAKER = 0.00055
+OK_VER = {"val-fade-v2"}
 SKIP_FILES = {"armed.jsonl"}
 
 def load_signals():
@@ -34,6 +35,8 @@ def load_signals():
             try:
                 rec = json.loads(line)
             except json.JSONDecodeError:
+                continue
+            if rec.get("version") not in OK_VER:
                 continue
             if rec.get("kind") == "armed":
                 continue
@@ -76,20 +79,22 @@ def resolve(ex, sig):
         if hi >= (entry if tp1_hit else stop):
             tag, r = ("BE", 0.5 * GRID_R) if tp1_hit else ("STOP", -1.0)
             return tag, r - fr, fr
-        if lo <= tp2:
-            r = (0.5 * GRID_R + 0.5 * plan_r) if tp1_hit else plan_r
-            return "TP2", r - fr, fr
         if lo <= tp1:
             tp1_hit = True
+            continue
+        if tp1_hit and lo <= tp2:
+            r = 0.5 * GRID_R + 0.5 * plan_r
+            return "TP2", r - fr, fr
     if tp1_hit:
         return "TP1", 0.5 * GRID_R - fr, fr
     return "OPEN", 0.0, 0.0
 
 def main():
     PAPER.mkdir(parents=True, exist_ok=True)
+    banner = "VAL paper v2 only. LIMIT 80% book off.\n"
     sigs = load_signals()
     if not sigs:
-        text = "VAL LIMIT  no signals\n"
+        text = banner + "пока нет сделок val-fade-v2\n"
         LATEST.write_text(text, encoding="utf-8")
         print(text, end="")
         return
@@ -120,10 +125,10 @@ def main():
     wr = 100.0 * sum(1 for x in taken if x > 0) / n if n else 0.0
     avgr = sum(taken) / n if n else 0.0
     head = (
-        f"VAL LIMIT  ${cap:.0f} ({(cap/START-1)*100:+.1f}%)  "
-        f"N={n}  WR {wr:.0f}%  AvgR {avgr:+.2f}  DD {dd*100:.0f}%"
+        f"VAL v2  ${cap:.0f} ({(cap / START - 1) * 100:+.1f}%)  "
+        f"N={n}  WR {wr:.0f}%  AvgR {avgr:+.2f}  DD {dd * 100:.0f}%"
     )
-    text = head + "\n" + "\n".join(lines) + "\n" + head + "\n"
+    text = banner + head + "\n" + "\n".join(lines) + "\n" + head + "\n"
     LATEST.write_text(text, encoding="utf-8")
     print(text, end="")
 
