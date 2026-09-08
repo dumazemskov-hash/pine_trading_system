@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VAL-FADE scanner. ARMED = limit on node. FIRED = close below node (journal)."""
+"""VAL-FADE v2. Pump 30-75%. ARMED watch. FIRED after next bar holds under node. One node once."""
 from __future__ import annotations
 import json, os, time
 from datetime import datetime, timezone
@@ -23,6 +23,7 @@ MAX_SYMBOLS = int(os.environ.get("VAL_MAX_SYMBOLS", "50"))
 COOLDOWN_BARS = 48
 LIMIT = 250
 PUMP_MIN = 0.30
+PUMP_MAX = 0.75
 PUMP_LB = 192
 N_BINS = 20
 HVN_FRAC = 0.55
@@ -33,9 +34,13 @@ MAX_STOP_PCT = 0.08
 MIN_RR = 1.2
 BTC_DUMP = 0.006
 GRID_R = 1.5
+VERSION = "val-fade-v2"
 
 def now():
     return datetime.now(timezone.utc)
+
+def node_id(symbol, entry):
+    return f"{symbol}_{round(float(entry), 6)}"
 
 def send_telegram(message: str):
     if os.environ.get("VAL_TG_OFF") == "1":
@@ -47,16 +52,29 @@ def send_telegram(message: str):
         print(f"TG: {e}")
 
 def load_state():
+    empty = {"sent": [], "armed": [], "last": {}, "pending": {}, "busy": []}
     if not STATE_PATH.exists():
-        return {"sent": [], "armed": [], "last": {}}
+        return empty
     try:
-        return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        st = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        for k, v in empty.items():
+            st.setdefault(k, v)
+        return st
     except json.JSONDecodeError:
-        return {"sent": [], "armed": [], "last": {}}
+        return empty
 
 def save_state(state):
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(state), encoding="utf-8")
+
+def persist(state, sent, armed_sent, last_bar, pending, busy):
+    save_state({
+        "sent": list(sent)[-400:],
+        "armed": list(armed_sent)[-400:],
+        "last": last_bar,
+        "pending": pending,
+        "busy": list(busy)[-200:],
+    })
 
 def append_jsonl(path: Path, rec: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,7 +91,10 @@ def profile_cluster(bars, lo_i, hi_i):
     if len(window) < 8:
         return None
     lo = min(b[3] for b in window); hi = max(b[2] for b in window)
-    if lo <= 0 or (hi - lo) / lo < PUMP_MIN:
+    if lo <= 0:
+        return None
+    pump = (hi - lo) / lo
+    if pump < PUMP_MIN or pump > PUMP_MAX:
         return None
     width = (hi - lo) / N_BINS
     if width <= 0:
@@ -163,7 +184,7 @@ def find_node(bars):
         if bar[4] < entry:
             already = any(bars[j][4] < entry for j in range(start, last))
             if already:
-                return pack(node, i, bar, "dead", pump_ts)
+                return pack(node, i, bar, "hold", pump_ts)
             return pack(node, i, bar, "fired", pump_ts)
         return pack(node, i, bar, "armed", pump_ts)
     return None
@@ -171,7 +192,7 @@ def find_node(bars):
 def rec_base(symbol, node, btc):
     return {
         "logged_at": now().isoformat(),
-        "version": "val-fade-scan-0.2",
+        "version": VERSION,
         "symbol": symbol,
         "kind": node["kind"],
         "entry": round(node["entry"], 8),
@@ -227,7 +248,7 @@ def btc_bar_ret(ex):
 
 def main():
     SIGNALS_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"[{now().strftime('%H:%M:%S')}] VAL-FADE  top{MAX_SYMBOLS}  ARMED+FIRED")
+    print(f"[{now().strftime('%H:%M:%S')}] VAL-FADE v2  top{MAX_SYMBOLS}  pump 30-75%  confirm+1")
     print(f"sleep {REQ_SLEEP}s/req  loop {LOOP_SLEEP}s")
     ex = make_exchange()
     if ex is None:
@@ -238,6 +259,8 @@ def main():
     sent = set(state.get("sent") or [])
     armed_sent = set(state.get("armed") or [])
     last_bar = state.get("last") or {}
+    pending = state.get("pending") or {}
+    busy = set(state.get("busy") or [])
     cycles = 0
     while True:
         try:
@@ -257,46 +280,73 @@ def main():
                 bars = fetch_ohlcv(ex, symbol)
                 time.sleep(REQ_SLEEP)
                 node = find_node(bars)
-                if node is None or node["kind"] == "dead":
+                if node is None:
                     continue
                 short = symbol.split("/")[0]
+                nid = node_id(symbol, node["entry"])
+                last = bars[-1]
+
+                if nid in pending:
+                    pend = pending[nid]
+                    if last[4] >= float(pend["entry"]):
+                        print(f"[{now().strftime('%H:%M:%S')}] RECLAIM {short} drop pending")
+                        del pending[nid]
+                        persist(state, sent, armed_sent, last_bar, pending, busy)
+                    elif last[4] < float(pend["entry"]):
+                        sid = nid + "_v2"
+                        if sid not in sent and nid not in busy:
+                            sent.add(sid)
+                            busy.add(nid)
+                            last_bar[symbol] = last[0]
+                            rec = dict(pend)
+                            rec["logged_at"] = now().isoformat()
+                            rec["kind"] = "fired"
+                            rec["version"] = VERSION
+                            rec["bar_ts"] = last[0]
+                            rec["confirm"] = True
+                            day = SIGNALS_DIR / f"{now().strftime('%Y-%m-%d')}.jsonl"
+                            append_jsonl(day, rec)
+                            del pending[nid]
+                            persist(state, sent, armed_sent, last_bar, pending, busy)
+                            send_telegram(
+                                f"VAL-FADE v2 FIRED | {symbol}\n"
+                                f"слом удержан close {last[4]}\n"
+                                f"вход {rec['entry']}  стоп {rec['stop']}\n"
+                                f"TP1 {rec['grid15']}  (основной)\n"
+                                f"TP2 {rec['tp04']}\n"
+                                f"pump {rec['pump_pct']:.1f}%\n"
+                                f"не догонять рынок"
+                            )
+                            print(f"[{now().strftime('%H:%M:%S')}] FIRED v2 {short}  pump={rec['pump_pct']:.1f}%")
+                    continue
+
+                if node["kind"] == "dead":
+                    continue
+                if nid in busy:
+                    continue
+
                 if node["kind"] == "armed":
-                    aid = f"{symbol}_{node.get('pump_ts') or node['pump_bar']}_armed"
+                    aid = nid + "_armed"
                     if aid in armed_sent:
                         continue
                     armed_sent.add(aid)
                     rec = rec_base(symbol, node, btc)
                     append_jsonl(ARMED_PATH, rec)
-                    save_state({"sent": list(sent)[-400:], "armed": list(armed_sent)[-400:], "last": last_bar})
+                    persist(state, sent, armed_sent, last_bar, pending, busy)
                     send_telegram(
-                        f"VAL-FADE ARMED | {symbol}\n"
-                        f"лимит {rec['entry']}\nстоп  {rec['stop']}\n"
-                        f"TP1 {rec['grid15']}\nTP2 {rec['tp04']}\n"
-                        f"pump {rec['pump_pct']:.1f}%  risk {rec['risk_pct']:.2f}%  planR {rec['plan_r']:.2f}\n"
-                        f"не рынок — лимитка на узел"
+                        f"VAL-FADE v2 ARMED | {symbol}\n"
+                        f"полка {rec['entry']}  стоп {rec['stop']}\n"
+                        f"TP1 {rec['grid15']}  TP2 {rec['tp04']}\n"
+                        f"pump {rec['pump_pct']:.1f}%\n"
+                        f"ждём close под узлом + бар удержания"
                     )
-                    print(f"[{now().strftime('%H:%M:%S')}] ARMED {short}  limit={rec['entry']}  pump={rec['pump_pct']:.1f}%")
+                    print(f"[{now().strftime('%H:%M:%S')}] ARMED {short}  pump={rec['pump_pct']:.1f}%")
                     continue
-                sid = f"{symbol}_{node['bar_ts']}"
-                if sid in sent:
-                    continue
-                prev = last_bar.get(symbol)
-                if prev and (node["bar_ts"] - prev) / (15 * 60 * 1000) < COOLDOWN_BARS:
-                    continue
-                sent.add(sid)
-                last_bar[symbol] = node["bar_ts"]
-                rec = rec_base(symbol, node, btc)
-                day = SIGNALS_DIR / f"{now().strftime('%Y-%m-%d')}.jsonl"
-                append_jsonl(day, rec)
-                save_state({"sent": list(sent)[-400:], "armed": list(armed_sent)[-400:], "last": last_bar})
-                send_telegram(
-                    f"VAL-FADE FIRED | {symbol}\n"
-                    f"close под узлом  {rec['entry']}\n"
-                    f"стоп {rec['stop']}  TP2 {rec['tp04']}\n"
-                    f"pump {rec['pump_pct']:.1f}%\n"
-                    f"если лимитки не было — не догонять"
-                )
-                print(f"[{now().strftime('%H:%M:%S')}] FIRED {short}  pump={rec['pump_pct']:.1f}%")
+
+                if node["kind"] == "fired":
+                    pending[nid] = rec_base(symbol, node, btc)
+                    persist(state, sent, armed_sent, last_bar, pending, busy)
+                    print(f"[{now().strftime('%H:%M:%S')}] PENDING {short} wait hold bar")
             except Exception as e:
                 if is_rate_limit(e):
                     rate_hits += 1
