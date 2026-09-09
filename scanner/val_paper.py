@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""VAL paper v2 only. Old LIMIT 80% book disabled."""
+"""VAL paper v2 only. Old LIMIT 80% book disabled. Times = MSK."""
 from __future__ import annotations
 import json, time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 try:
@@ -20,6 +20,10 @@ GRID_R = 1.5
 TAKER = 0.00055
 OK_VER = {"val-fade-v2"}
 SKIP_FILES = {"armed.jsonl"}
+MSK = timezone(timedelta(hours=3))
+
+def msk(ts_ms):
+    return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).astimezone(MSK).strftime("%m-%d %H:%M")
 
 def load_signals():
     by_key = {}
@@ -91,7 +95,7 @@ def resolve(ex, sig):
 
 def main():
     PAPER.mkdir(parents=True, exist_ok=True)
-    banner = "VAL paper v2 only. LIMIT 80% book off.\n"
+    banner = "VAL paper v2 only. LIMIT 80% book off. time=MSK\n"
     sigs = load_signals()
     if not sigs:
         text = banner + "пока нет сделок val-fade-v2\n"
@@ -111,7 +115,7 @@ def main():
         tag, r, fr = resolve(ex, sig)
         name = str(sig["symbol"]).split("/")[0].replace("USDT", "").replace(":", "")
         ts = int(sig.get("bar_ts") or 0)
-        tstr = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime("%m-%d %H:%M") if ts else "?"
+        tstr = msk(ts) if ts else "?"
         pump = float(sig.get("pump_pct") or 0)
         if tag not in ("OPEN", "ERR"):
             cap += cap * RISK_PCT * r
