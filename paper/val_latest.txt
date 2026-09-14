@@ -1,5 +1,5 @@
 VAL paper v2 only. LIMIT 80% book off. time=MSK
-VAL v2  $314 (+4.5%)  N=9  WR 89%  AvgR +0.49  DD 1%
+VAL v2  $345 (+15.1%)  N=38  WR 82%  AvgR +0.37  DD 2%
 09-08 14:15  IOST      BE    +0.70R  fee 0.05R  pump 72%
 09-08 20:00  SOPH      BE    +0.70R  fee 0.05R  pump 66%
 09-08 20:30  VVV       BE    +0.69R  fee 0.06R  pump 52%
@@ -9,4 +9,35 @@ VAL v2  $314 (+4.5%)  N=9  WR 89%  AvgR +0.49  DD 1%
 09-09 13:30  DOT       TP1   +0.66R  fee 0.09R  pump 32%
 09-09 14:00  DOT       TP1   +0.66R  fee 0.09R  pump 32%
 09-09 16:00  USELESS   TP1   +0.69R  fee 0.06R  pump 56%
-VAL v2  $314 (+4.5%)  N=9  WR 89%  AvgR +0.49  DD 1%
+09-10 13:00  VVV       BE    +0.70R  fee 0.05R  pump 64%
+09-10 15:00  VVV       BE    +0.70R  fee 0.05R  pump 61%
+09-11 00:45  NIULAI    STOP  -1.05R  fee 0.05R  pump 78%
+09-11 03:45  NIULAI    STOP  -1.02R  fee 0.02R  pump 78%
+09-11 04:45  MARSCOIN  BE    +0.66R  fee 0.09R  pump 31%
+09-11 05:45  MARSCOIN  BE    +0.66R  fee 0.09R  pump 32%
+09-11 13:30  RAYDIUM   BE    +0.69R  fee 0.06R  pump 47%
+09-11 13:45  AKE       STOP  -1.05R  fee 0.05R  pump 66%
+09-12 00:30  MET       TP1   +0.72R  fee 0.03R  pump 50%
+09-12 07:30  LAB       STOP  -1.02R  fee 0.02R  pump 92%
+09-12 17:30  UAI       TP1   +0.68R  fee 0.07R  pump 44%
+09-13 01:15  GRIFFAIN  BE    +0.69R  fee 0.06R  pump 58%
+09-13 02:30  FLOCK     STOP  -1.06R  fee 0.06R  pump 47%
+09-13 03:30  RIVER     TP1   +0.69R  fee 0.06R  pump 51%
+09-13 04:30  NIULAI    STOP  -1.06R  fee 0.06R  pump 46%
+09-13 06:30  NIULAI    TP1   +0.69R  fee 0.06R  pump 47%
+09-13 10:30  STEEM     BE    +0.71R  fee 0.04R  pump 98%
+09-13 11:45  POWR      TP1   +0.71R  fee 0.04R  pump 83%
+09-13 13:45  POWR      TP1   +0.71R  fee 0.04R  pump 82%
+09-13 18:30  ARK       BE    +0.71R  fee 0.04R  pump 79%
+09-13 19:00  GRIFFAIN  TP1   +0.69R  fee 0.06R  pump 54%
+09-13 19:30  BTW       BE    +0.69R  fee 0.06R  pump 49%
+09-13 23:15  POWR      TP1   +0.71R  fee 0.04R  pump 77%
+09-14 01:00  POWR      TP1   +0.71R  fee 0.04R  pump 75%
+09-14 01:45  REZ       BE    +0.72R  fee 0.03R  pump 62%
+09-14 02:15  FIL       BE    +0.71R  fee 0.04R  pump 34%
+09-14 04:00  POWR      TP1   +0.70R  fee 0.05R  pump 73%
+09-14 04:45  BTW       BE    +0.69R  fee 0.06R  pump 52%
+09-14 05:45  ARK       BE    +0.70R  fee 0.05R  pump 76%
+09-14 07:30  FIL       OPEN  +0.00R  pump 30%
+09-14 07:45  FIL       OPEN  +0.00R  pump 30%
+VAL v2  $345 (+15.1%)  N=38  WR 82%  AvgR +0.37  DD 2%
