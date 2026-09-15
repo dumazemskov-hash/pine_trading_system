@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VAL paper v2 only. Dedup near entry + 48 bars. Times = MSK."""
+"""VAL paper v2 only. One ticker per 48 bars. Times = MSK."""
 from __future__ import annotations
 import json, time
 from datetime import datetime, timezone, timedelta
@@ -21,16 +21,10 @@ TAKER = 0.00055
 OK_VER = {"val-fade-v2"}
 SKIP_FILES = {"armed.jsonl"}
 MSK = timezone(timedelta(hours=3))
-NEAR_ENTRY = 0.003
 CD_MS = 48 * 15 * 60 * 1000
 
 def msk(ts_ms):
     return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).astimezone(MSK).strftime("%m-%d %H:%M")
-
-def same_node(a, b):
-    a, b = float(a), float(b)
-    m = max(abs(a), abs(b), 1e-12)
-    return abs(a - b) / m < NEAR_ENTRY
 
 def collapse(sigs):
     out = []
@@ -38,8 +32,6 @@ def collapse(sigs):
         dup = False
         for prev in out:
             if prev["symbol"] != rec["symbol"]:
-                continue
-            if not same_node(prev["entry"], rec["entry"]):
                 continue
             dt = abs(int(rec.get("bar_ts") or 0) - int(prev.get("bar_ts") or 0))
             if dt <= CD_MS:
@@ -117,7 +109,7 @@ def resolve(ex, sig):
 
 def main():
     PAPER.mkdir(parents=True, exist_ok=True)
-    banner = "VAL paper v2 only. dedup 0.3%+48bar. time=MSK\n"
+    banner = "VAL paper v2 only. 1 ticker / 12h. time=MSK\n"
     sigs = load_signals()
     if not sigs:
         text = banner + "пока нет сделок val-fade-v2\n"
