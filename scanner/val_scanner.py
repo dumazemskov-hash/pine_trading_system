@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VAL-FADE v2. Pump 30-100%. ARMED watch. FIRED after next bar holds under node. One node once."""
+"""VAL-FADE v2. Pump 30-100%. ARMED watch. FIRED after hold bar. One node per ticker."""
 from __future__ import annotations
 import json, os, time
 from datetime import datetime, timezone
@@ -21,6 +21,8 @@ LOOP_SLEEP = int(os.environ.get("VAL_LOOP_SLEEP", "90"))
 REQ_SLEEP = float(os.environ.get("VAL_REQ_SLEEP", "0.18"))
 MAX_SYMBOLS = int(os.environ.get("VAL_MAX_SYMBOLS", "50"))
 COOLDOWN_BARS = 48
+BAR_MS = 15 * 60 * 1000
+NEAR_ENTRY = 0.003
 LIMIT = 250
 PUMP_MIN = 0.30
 PUMP_MAX = 1.00
@@ -40,7 +42,12 @@ def now():
     return datetime.now(timezone.utc)
 
 def node_id(symbol, entry):
-    return f"{symbol}_{round(float(entry), 6)}"
+    return f"{symbol}_{format(float(entry), '.4g')}"
+
+def same_node(a, b):
+    a, b = float(a), float(b)
+    m = max(abs(a), abs(b), 1e-12)
+    return abs(a - b) / m < NEAR_ENTRY
 
 def send_telegram(message: str):
     if os.environ.get("VAL_TG_OFF") == "1":
@@ -80,6 +87,35 @@ def append_jsonl(path: Path, rec: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+def in_cooldown(last_bar, symbol, bar_ts):
+    prev = last_bar.get(symbol)
+    if not prev:
+        return False
+    return (int(bar_ts) - int(prev)) / BAR_MS < COOLDOWN_BARS
+
+def pending_key(pending, symbol, entry):
+    for k, rec in pending.items():
+        if rec.get("symbol") == symbol and same_node(entry, rec.get("entry") or 0):
+            return k
+    return None
+
+def is_busy_near(busy, symbol, entry):
+    nid = node_id(symbol, entry)
+    if nid in busy:
+        return True
+    prefix = symbol + "_"
+    for item in busy:
+        if not str(item).startswith(prefix):
+            continue
+        tail = str(item)[len(prefix):]
+        try:
+            old = float(tail)
+        except ValueError:
+            continue
+        if same_node(entry, old):
+            return True
+    return False
 
 def local_high(bars, i, left=3, right=3):
     h = bars[i][2]
@@ -248,7 +284,7 @@ def btc_bar_ret(ex):
 
 def main():
     SIGNALS_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"[{now().strftime('%H:%M:%S')}] VAL-FADE v2  top{MAX_SYMBOLS}  pump 30-100%  confirm+1")
+    print(f"[{now().strftime('%H:%M:%S')}] VAL-FADE v2  top{MAX_SYMBOLS}  pump 30-100%  confirm+1  dedup 0.3%+48bar")
     print(f"sleep {REQ_SLEEP}s/req  loop {LOOP_SLEEP}s")
     ex = make_exchange()
     if ex is None:
@@ -283,18 +319,20 @@ def main():
                 if node is None:
                     continue
                 short = symbol.split("/")[0]
-                nid = node_id(symbol, node["entry"])
+                entry = node["entry"]
+                nid = node_id(symbol, entry)
                 last = bars[-1]
+                pk = pending_key(pending, symbol, entry)
 
-                if nid in pending:
-                    pend = pending[nid]
+                if pk is not None:
+                    pend = pending[pk]
                     if last[4] >= float(pend["entry"]):
                         print(f"[{now().strftime('%H:%M:%S')}] RECLAIM {short} drop pending")
-                        del pending[nid]
+                        del pending[pk]
                         persist(state, sent, armed_sent, last_bar, pending, busy)
                     elif last[4] < float(pend["entry"]):
                         sid = nid + "_v2"
-                        if sid not in sent and nid not in busy:
+                        if sid not in sent and not is_busy_near(busy, symbol, entry):
                             sent.add(sid)
                             busy.add(nid)
                             last_bar[symbol] = last[0]
@@ -306,7 +344,7 @@ def main():
                             rec["confirm"] = True
                             day = SIGNALS_DIR / f"{now().strftime('%Y-%m-%d')}.jsonl"
                             append_jsonl(day, rec)
-                            del pending[nid]
+                            del pending[pk]
                             persist(state, sent, armed_sent, last_bar, pending, busy)
                             send_telegram(
                                 f"VAL-FADE v2 FIRED | {symbol}\n"
@@ -322,7 +360,9 @@ def main():
 
                 if node["kind"] == "dead":
                     continue
-                if nid in busy:
+                if is_busy_near(busy, symbol, entry):
+                    continue
+                if in_cooldown(last_bar, symbol, node["bar_ts"]):
                     continue
 
                 if node["kind"] == "armed":
