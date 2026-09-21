@@ -1,5 +1,5 @@
-VAL paper v2 only. LIMIT 80% book off. time=MSK
-VAL v2  $351 (+17.1%)  N=48  WR 79%  AvgR +0.33  DD 2%
+VAL paper v2 only. 1 ticker / 12h. time=MSK
+VAL v2  $357 (+19.0%)  N=58  WR 78%  AvgR +0.30  DD 2%
 09-08 14:15  IOST      BE    +0.70R  fee 0.05R  pump 72%
 09-08 20:00  SOPH      BE    +0.70R  fee 0.05R  pump 66%
 09-08 20:30  VVV       BE    +0.69R  fee 0.06R  pump 52%
@@ -7,14 +7,10 @@ VAL v2  $351 (+17.1%)  N=48  WR 79%  AvgR +0.33  DD 2%
 09-09 00:15  AKE       TP1   +0.71R  fee 0.04R  pump 99%
 09-09 08:30  INJ       STOP  -1.08R  fee 0.08R  pump 32%
 09-09 13:30  DOT       TP1   +0.66R  fee 0.09R  pump 32%
-09-09 14:00  DOT       TP1   +0.66R  fee 0.09R  pump 32%
 09-09 16:00  USELESS   TP1   +0.69R  fee 0.06R  pump 56%
 09-10 13:00  VVV       BE    +0.70R  fee 0.05R  pump 64%
-09-10 15:00  VVV       BE    +0.70R  fee 0.05R  pump 61%
 09-11 00:45  NIULAI    STOP  -1.05R  fee 0.05R  pump 78%
-09-11 03:45  NIULAI    STOP  -1.02R  fee 0.02R  pump 78%
 09-11 04:45  MARSCOIN  BE    +0.66R  fee 0.09R  pump 31%
-09-11 05:45  MARSCOIN  BE    +0.66R  fee 0.09R  pump 32%
 09-11 13:30  RAYDIUM   BE    +0.69R  fee 0.06R  pump 47%
 09-11 13:45  AKE       STOP  -1.05R  fee 0.05R  pump 66%
 09-12 00:30  MET       TP1   +0.72R  fee 0.03R  pump 50%
@@ -24,28 +20,42 @@ VAL v2  $351 (+17.1%)  N=48  WR 79%  AvgR +0.33  DD 2%
 09-13 02:30  FLOCK     STOP  -1.06R  fee 0.06R  pump 47%
 09-13 03:30  RIVER     TP1   +0.69R  fee 0.06R  pump 51%
 09-13 04:30  NIULAI    STOP  -1.06R  fee 0.06R  pump 46%
-09-13 06:30  NIULAI    TP1   +0.69R  fee 0.06R  pump 47%
 09-13 10:30  STEEM     BE    +0.71R  fee 0.04R  pump 98%
 09-13 11:45  POWR      TP1   +0.71R  fee 0.04R  pump 83%
-09-13 13:45  POWR      TP1   +0.71R  fee 0.04R  pump 82%
 09-13 18:30  ARK       BE    +0.71R  fee 0.04R  pump 79%
 09-13 19:00  GRIFFAIN  TP1   +0.69R  fee 0.06R  pump 54%
 09-13 19:30  BTW       BE    +0.69R  fee 0.06R  pump 49%
-09-13 23:15  POWR      TP1   +0.71R  fee 0.04R  pump 77%
 09-14 01:00  POWR      TP1   +0.71R  fee 0.04R  pump 75%
 09-14 01:45  REZ       BE    +0.72R  fee 0.03R  pump 62%
 09-14 02:15  FIL       BE    +0.71R  fee 0.04R  pump 34%
-09-14 04:00  POWR      TP1   +0.70R  fee 0.05R  pump 73%
-09-14 04:45  BTW       BE    +0.69R  fee 0.06R  pump 52%
-09-14 05:45  ARK       BE    +0.70R  fee 0.05R  pump 76%
-09-14 07:30  FIL       STOP  -1.04R  fee 0.04R  pump 30%
-09-14 07:45  FIL       STOP  -1.04R  fee 0.04R  pump 30%
 09-14 13:00  FLOCK     TP1   +0.69R  fee 0.06R  pump 49%
-09-14 16:00  FLOCK     TP1   +0.68R  fee 0.07R  pump 40%
 09-14 17:45  CAP       BE    +0.72R  fee 0.03R  pump 62%
 09-14 19:30  MTL       TP1   +0.70R  fee 0.05R  pump 60%
 09-15 04:15  PONS      STOP  -1.08R  fee 0.08R  pump 34%
 09-15 05:15  CVC       TP1   +0.71R  fee 0.04R  pump 89%
-09-15 08:15  CVC       TP1   +0.71R  fee 0.04R  pump 85%
-09-15 09:30  CVC       TP1   +0.71R  fee 0.04R  pump 81%
-VAL v2  $351 (+17.1%)  N=48  WR 79%  AvgR +0.33  DD 2%
+09-16 12:15  POWER     TP1   +0.71R  fee 0.04R  pump 86%
+09-16 20:45  AKE       BE    +0.73R  fee 0.02R  pump 91%
+09-17 16:45  CASHCAT   BE    +0.67R  fee 0.08R  pump 39%
+09-17 18:30  USELESS   BE    +0.68R  fee 0.07R  pump 43%
+09-18 05:00  COTI      TP1   +0.72R  fee 0.03R  pump 67%
+09-18 11:45  MARSCOIN  BE    +0.69R  fee 0.06R  pump 48%
+09-18 14:15  ZEC       STOP  -1.04R  fee 0.04R  pump 31%
+09-18 17:00  DRIFT     BE    +0.71R  fee 0.04R  pump 76%
+09-18 17:45  ARB       BE    +0.69R  fee 0.06R  pump 49%
+09-18 18:00  INJ       BE    +0.67R  fee 0.08R  pump 36%
+09-18 21:00  PONS      TP1   +0.68R  fee 0.07R  pump 43%
+09-19 04:00  STRK      BE    +0.70R  fee 0.05R  pump 65%
+09-19 08:45  APT       BE    +0.68R  fee 0.07R  pump 41%
+09-19 13:45  NEAR      BE    +0.68R  fee 0.07R  pump 44%
+09-19 18:45  AR        BE    +0.71R  fee 0.04R  pump 92%
+09-19 20:30  OP        STOP  -1.04R  fee 0.04R  pump 30%
+09-20 00:30  AVAX      STOP  -1.09R  fee 0.09R  pump 30%
+09-20 01:45  FIL       TP1   +0.68R  fee 0.07R  pump 39%
+09-20 05:30  ZAMA      BE    +0.71R  fee 0.04R  pump 90%
+09-20 05:45  ENA       STOP  -1.04R  fee 0.04R  pump 38%
+09-20 06:45  XTZ       TP1   +0.72R  fee 0.03R  pump 56%
+09-20 14:15  B2        BE    +0.67R  fee 0.08R  pump 34%
+09-20 19:30  ZIL       TP1   +0.68R  fee 0.07R  pump 45%
+09-21 00:45  SAGA      STOP  -1.02R  fee 0.02R  pump 64%
+09-21 05:45  AVAX      STOP  -1.07R  fee 0.07R  pump 42%
+VAL v2  $357 (+19.0%)  N=58  WR 78%  AvgR +0.30  DD 2%
