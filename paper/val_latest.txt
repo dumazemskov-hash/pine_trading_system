@@ -1,5 +1,5 @@
 VAL paper v2 only. 1 ticker / 12h. time=MSK
-VAL v2  $357 (+19.0%)  N=58  WR 78%  AvgR +0.30  DD 2%
+VAL v2  $360 (+19.9%)  N=59  WR 78%  AvgR +0.31  DD 2%
 09-08 14:15  IOST      BE    +0.70R  fee 0.05R  pump 72%
 09-08 20:00  SOPH      BE    +0.70R  fee 0.05R  pump 66%
 09-08 20:30  VVV       BE    +0.69R  fee 0.06R  pump 52%
@@ -58,4 +58,5 @@ VAL v2  $357 (+19.0%)  N=58  WR 78%  AvgR +0.30  DD 2%
 09-20 19:30  ZIL       TP1   +0.68R  fee 0.07R  pump 45%
 09-21 00:45  SAGA      STOP  -1.02R  fee 0.02R  pump 64%
 09-21 05:45  AVAX      STOP  -1.07R  fee 0.07R  pump 42%
-VAL v2  $357 (+19.0%)  N=58  WR 78%  AvgR +0.30  DD 2%
+09-21 13:15  SAGA      TP1   +0.70R  fee 0.05R  pump 71%
+VAL v2  $360 (+19.9%)  N=59  WR 78%  AvgR +0.31  DD 2%
